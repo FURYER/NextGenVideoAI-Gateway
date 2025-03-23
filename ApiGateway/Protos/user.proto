@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+option csharp_namespace = "UserService.Protos";
+
+service UserService {
+  rpc RegisterUser (RegisterUserRequest) returns (RegisterUserResponse);
+  rpc GetUserById (GetUserByIdRequest) returns (GetUserByIdResponse);
+  rpc UpdateCredits (UpdateCreditsRequest) returns (UpdateCreditsResponse);
+}
+
+message RegisterUserRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+}
+
+message RegisterUserResponse {
+  string user_id = 1;
+}
+
+message GetUserByIdRequest {
+  string user_id = 1;
+}
+
+message GetUserByIdResponse {
+  string user_id = 1;
+  string username = 2;
+  string email = 3;
+  double credits = 4;
+}
+
+message UpdateCreditsRequest {
+  string user_id = 1;
+  double amount = 2;
+}
+
+message UpdateCreditsResponse {
+  double new_balance = 1;
+}

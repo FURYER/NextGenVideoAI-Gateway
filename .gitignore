@@ -1,0 +1,40 @@
+# .NET Core / .NET
+bin/
+obj/
+
+# Файлы Visual Studio
+*.csproj.user
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# Тесты
+TestResults/
+*.trx
+*.xml
+
+# Профилировка
+*.coverage
+*.coveragexml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+*.bak
+
+# .env файл
+.env
+
+# Временные файлы и логи
+*.log
+*.tmp
+*.temp
