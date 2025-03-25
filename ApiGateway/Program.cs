@@ -13,6 +13,9 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Cors;
 using HotChocolate.Types;
 using HotChocolate.Types.Pagination;
+using System.Security.Cryptography.X509Certificates;
+using System.IO;
+using System.Security.Cryptography;
 
 public class Program
 {
@@ -111,6 +114,32 @@ public class Program
                         options.Tool.Enable = true;
                         options.EnableSchemaRequests = true;
                         options.AllowedGetOperations = AllowedGetOperations.QueryAndMutation;
+                    });
+                })
+                .ConfigureKestrel(serverOptions =>
+                {
+                    var httpsPort = int.Parse(Environment.GetEnvironmentVariable("GATEWAY_PORT")!);
+                    Console.WriteLine(httpsPort);
+                    serverOptions.ListenAnyIP(httpsPort, listenOptions =>
+                    {
+                        listenOptions.UseHttps(httpsOptions =>
+                        {
+                            var certificatePath = Environment.GetEnvironmentVariable("CERTIFICATE_PATH");
+                            var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
+
+                            // Создаем SecureString из пароля
+                            var securePassword = new System.Security.SecureString();
+                            foreach (char c in certificatePassword!)
+                            {
+                                securePassword.AppendChar(c);
+                            }
+
+                            // Загружаем сертификат
+                            httpsOptions.ServerCertificate = new X509Certificate2(
+                                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
+                                securePassword
+                            );
+                        });
                     });
                 })
                 .Configure(app =>

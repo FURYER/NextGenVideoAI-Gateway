@@ -21,6 +21,12 @@
   </ItemGroup>
 
 <ItemGroup>
+    <None Include="certs\**">
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+</ItemGroup>
+
+<ItemGroup>
     <Protobuf Include="Protos/user.proto" GrpcServices="Client" />
   </ItemGroup>
 
