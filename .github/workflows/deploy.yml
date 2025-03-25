@@ -29,6 +29,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Create deployment files
+        run: |
+          # Создаем временную директорию для файлов деплоя
+          mkdir -p deploy
+          # Копируем только необходимые файлы
+          cp docker-compose.yml deploy/
+          # Создаем .env файл с необходимыми переменными окружения
+          echo "ASPNETCORE_ENVIRONMENT=Production" > deploy/.env
+          echo "DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/nextgen-video-ai-gateway:latest" >> deploy/.env
+
       - name: Deploy to server
         uses: appleboy/ssh-action@master
         with:
@@ -37,8 +47,42 @@ jobs:
           key: ${{ secrets.SERVER_SSH_KEY }}
           debug: true
           script: |
-            echo "Current directory: $(pwd)"
-            echo "Directory contents: $(ls -la)"
+            # Создаем директорию для приложения
+            mkdir -p /var/www/services/nextgen-video-ai
             cd /var/www/services/nextgen-video-ai
+
+            # Останавливаем текущие контейнеры
+            docker-compose down || true
+
+            # Удаляем старые файлы
+            rm -f docker-compose.yml .env
+
+            # Копируем новые файлы
+            cat > docker-compose.yml << 'EOL'
+            version: "3.8"
+
+            services:
+              api-gateway:
+                image: ${DOCKER_IMAGE}
+                ports:
+                  - "5001:80"
+                environment:
+                  - ASPNETCORE_ENVIRONMENT=Production
+                restart: unless-stopped
+                networks:
+                  - app-network
+
+            networks:
+              app-network:
+                driver: bridge
+            EOL
+
+            # Создаем .env файл
+            cat > .env << EOL
+            ASPNETCORE_ENVIRONMENT=Production
+            DOCKER_IMAGE=${{ secrets.DOCKERHUB_USERNAME }}/nextgen-video-ai-gateway:latest
+            EOL
+
+            # Запускаем приложение
             docker-compose pull
             docker-compose up -d
