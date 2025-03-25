@@ -14,132 +14,111 @@ using Microsoft.AspNetCore.Cors;
 using HotChocolate.Types;
 using HotChocolate.Types.Pagination;
 
-public class Program
+var builder = WebApplication.CreateBuilder(args);
+
+// Загружаем .env файл
+Env.Load();
+
+// Регистрируем UserResolver в DI
+builder.Services.AddScoped<UserResolver>();
+
+// Добавляем HttpContextAccessor
+builder.Services.AddHttpContextAccessor();
+
+// Настраиваем аутентификацию JWT
+builder.Services.AddAuthentication(options =>
 {
-    public static void Main(string[] args)
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
     {
-        // Загружаем .env файл
-        Env.Load();
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = "NextGenVideoAI",
+        ValidAudience = "NextGenVideoAI",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("your-very-long-secret-key-1234567890"))
+    };
+});
 
-        CreateHostBuilder(args).Build().Run();
-    }
+// Добавляем авторизацию
+builder.Services.AddAuthorization(options =>
+{
+    // Добавляем политику по умолчанию, требующую аутентификацию
+    options.DefaultPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
 
-    public static IHostBuilder CreateHostBuilder(string[] args) =>
-        Host.CreateDefaultBuilder(args)
-            .ConfigureAppConfiguration((hostingContext, config) =>
-            {
-                config.AddEnvironmentVariables();
-            })
-            .ConfigureWebHostDefaults(webBuilder =>
-            {
-                webBuilder.ConfigureServices(services =>
-                {
-                    // Регистрируем UserResolver в DI
-                    services.AddScoped<UserResolver>();
+    // Добавляем политику для анонимного доступа
+    options.AddPolicy("AllowAnonymous", policy =>
+        policy.RequireAssertion(context => true));
+});
 
-                    // Добавляем HttpContextAccessor
-                    services.AddHttpContextAccessor();
+// Добавляем CORS
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(builder =>
+    {
+        builder.AllowAnyOrigin()
+               .AllowAnyMethod()
+               .AllowAnyHeader();
+    });
+});
 
-                    // Настраиваем аутентификацию JWT
-                    services.AddAuthentication(options =>
-                    {
-                        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
-                        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
-                    })
-                    .AddJwtBearer(options =>
-                    {
-                        options.TokenValidationParameters = new TokenValidationParameters
-                        {
-                            ValidateIssuer = true,
-                            ValidateAudience = true,
-                            ValidateLifetime = true,
-                            ValidateIssuerSigningKey = true,
-                            ValidIssuer = "NextGenVideoAI",
-                            ValidAudience = "NextGenVideoAI",
-                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("your-very-long-secret-key-1234567890"))
-                        };
-                    });
+// Добавляем GraphQL-сервер
+builder.Services.AddGraphQLServer()
+    .AddQueryType<Query>()
+    .AddMutationType<Mutation>()
+    .AddType<UserType>()
+    .AddType<RegisterUserInputType>()
+    .AddType<UpdateCreditsInputType>()
+    .AddType<LoginInputType>()
+    .AddType<AuthResponseType>()
+    .AddAuthorizationHandler<DefaultAuthorizationHandler>()
+    .AddErrorFilter<ErrorFilter>()
+    .ModifyRequestOptions(opt =>
+    {
+        opt.IncludeExceptionDetails = true;
+    })
+    .ModifyOptions(opt =>
+    {
+        opt.DefaultBindingBehavior = BindingBehavior.Explicit;
+        opt.StrictValidation = false;
+    });
 
-                    // Добавляем авторизацию
-                    services.AddAuthorization(options =>
-                    {
-                        // Добавляем политику по умолчанию, требующую аутентификацию
-                        options.DefaultPolicy = new AuthorizationPolicyBuilder()
-                            .RequireAuthenticatedUser()
-                            .Build();
+// Настраиваем endpoint
+builder.Services.Configure<GraphQLServerOptions>(options =>
+{
+    options.Tool.Enable = true;
+    options.EnableSchemaRequests = true;
+    options.AllowedGetOperations = AllowedGetOperations.QueryAndMutation;
+});
 
-                        // Добавляем политику для анонимного доступа
-                        options.AddPolicy("AllowAnonymous", policy =>
-                            policy.RequireAssertion(context => true));
-                    });
+var app = builder.Build();
 
-                    // Добавляем CORS
-                    services.AddCors(options =>
-                    {
-                        options.AddDefaultPolicy(builder =>
-                        {
-                            builder.AllowAnyOrigin()
-                                   .AllowAnyMethod()
-                                   .AllowAnyHeader();
-                        });
-                    });
+// Добавляем CORS middleware
+app.UseCors();
 
-                    // Добавляем GraphQL-сервер
-                    services.AddGraphQLServer()
-                        .AddQueryType<Query>()
-                        .AddMutationType<Mutation>()
-                        .AddType<UserType>()
-                        .AddType<RegisterUserInputType>()
-                        .AddType<UpdateCreditsInputType>()
-                        .AddType<LoginInputType>()
-                        .AddType<AuthResponseType>()
-                        .AddAuthorizationHandler<DefaultAuthorizationHandler>()
-                        .AddErrorFilter<ErrorFilter>()
-                        .ModifyRequestOptions(opt =>
-                        {
-                            opt.IncludeExceptionDetails = true;
-                        })
-                        .ModifyOptions(opt =>
-                        {
-                            opt.DefaultBindingBehavior = BindingBehavior.Explicit;
-                            opt.StrictValidation = false;
-                        });
+// Добавляем middleware для аутентификации и авторизации
+app.UseAuthentication();
+app.UseAuthorization();
 
-                    // Настраиваем endpoint
-                    services.Configure<GraphQLServerOptions>(options =>
-                    {
-                        options.Tool.Enable = true;
-                        options.EnableSchemaRequests = true;
-                        options.AllowedGetOperations = AllowedGetOperations.QueryAndMutation;
-                    });
-                })
-                .Configure(app =>
-                {
-                    app.UseRouting();
+// Настраиваем GraphQL endpoint и включаем GraphiQL UI
+app.MapGraphQL()
+    .WithOptions(new GraphQLServerOptions
+    {
+        Tool = { Enable = true }, // Включаем GraphiQL UI
+        EnableSchemaRequests = true, // Включаем запросы схемы
+        AllowedGetOperations = AllowedGetOperations.QueryAndMutation // Разрешаем GET запросы для Query и Mutation
+    });
 
-                    // Добавляем CORS middleware
-                    app.UseCors();
+app.MapGet("/", async context =>
+{
+    await context.Response.WriteAsync("GraphQL API Gateway is running. Access GraphiQL at /graphql");
+});
 
-                    // Добавляем middleware для аутентификации и авторизации
-                    app.UseAuthentication();
-                    app.UseAuthorization();
-
-                    app.UseEndpoints(endpoints =>
-                    {
-                        // Настраиваем GraphQL endpoint и включаем GraphiQL UI
-                        endpoints.MapGraphQL()
-                            .WithOptions(new GraphQLServerOptions
-                            {
-                                Tool = { Enable = true }, // Включаем GraphiQL UI
-                                EnableSchemaRequests = true, // Включаем запросы схемы
-                                AllowedGetOperations = AllowedGetOperations.QueryAndMutation // Разрешаем GET запросы для Query и Mutation
-                            });
-
-                        endpoints.MapGet("/", async context =>
-                        {
-                            await context.Response.WriteAsync("GraphQL API Gateway is running. Access GraphiQL at /graphql");
-                        });
-                    });
-                });
-            });
-}
+app.Run();
