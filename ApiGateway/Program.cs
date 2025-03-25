@@ -57,9 +57,11 @@ public class Program
                             ValidateAudience = true,
                             ValidateLifetime = true,
                             ValidateIssuerSigningKey = true,
-                            ValidIssuer = "NextGenVideoAI",
-                            ValidAudience = "NextGenVideoAI",
-                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("your-very-long-secret-key-1234567890"))
+                            ValidIssuer = Environment.GetEnvironmentVariable("Jwt__Issuer"),
+                            ValidAudience = Environment.GetEnvironmentVariable("Jwt__Audience"),
+                            IssuerSigningKey = new SymmetricSecurityKey(
+                                Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("Jwt__Key")!)
+                            )
                         };
                     });
 
