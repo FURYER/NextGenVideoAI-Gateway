@@ -4,6 +4,7 @@ option csharp_namespace = "UserService.Protos";
 
 service UserService {
   rpc RegisterUser (RegisterUserRequest) returns (RegisterUserResponse);
+  rpc Login (LoginRequest) returns (LoginResponse);
   rpc GetUserById (GetUserByIdRequest) returns (GetUserByIdResponse);
   rpc UpdateCredits (UpdateCreditsRequest) returns (UpdateCreditsResponse);
 }
@@ -16,6 +17,17 @@ message RegisterUserRequest {
 
 message RegisterUserResponse {
   string user_id = 1;
+  string token = 2; // Добавляем токен
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message LoginResponse {
+  string user_id = 1;
+  string token = 2;
 }
 
 message GetUserByIdRequest {

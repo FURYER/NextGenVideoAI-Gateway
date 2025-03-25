@@ -2,7 +2,17 @@
 using DotNetEnv;
 using ApiGateway.GraphQL;
 using HotChocolate.AspNetCore;
+using HotChocolate; // Для IError
 using Grpc.Core;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
+using HotChocolate.Execution;
+using HotChocolate.Authorization;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Cors;
+using HotChocolate.Types;
+using HotChocolate.Types.Pagination;
 
 public class Program
 {
@@ -27,27 +37,92 @@ public class Program
                     // Регистрируем UserResolver в DI
                     services.AddScoped<UserResolver>();
 
+                    // Добавляем HttpContextAccessor
+                    services.AddHttpContextAccessor();
+
+                    // Настраиваем аутентификацию JWT
+                    services.AddAuthentication(options =>
+                    {
+                        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+                        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+                    })
+                    .AddJwtBearer(options =>
+                    {
+                        options.TokenValidationParameters = new TokenValidationParameters
+                        {
+                            ValidateIssuer = true,
+                            ValidateAudience = true,
+                            ValidateLifetime = true,
+                            ValidateIssuerSigningKey = true,
+                            ValidIssuer = "NextGenVideoAI",
+                            ValidAudience = "NextGenVideoAI",
+                            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes("your-very-long-secret-key-1234567890"))
+                        };
+                    });
+
+                    // Добавляем авторизацию
+                    services.AddAuthorization(options =>
+                    {
+                        // Добавляем политику по умолчанию, требующую аутентификацию
+                        options.DefaultPolicy = new AuthorizationPolicyBuilder()
+                            .RequireAuthenticatedUser()
+                            .Build();
+
+                        // Добавляем политику для анонимного доступа
+                        options.AddPolicy("AllowAnonymous", policy =>
+                            policy.RequireAssertion(context => true));
+                    });
+
+                    // Добавляем CORS
+                    services.AddCors(options =>
+                    {
+                        options.AddDefaultPolicy(builder =>
+                        {
+                            builder.AllowAnyOrigin()
+                                   .AllowAnyMethod()
+                                   .AllowAnyHeader();
+                        });
+                    });
+
                     // Добавляем GraphQL-сервер
                     services.AddGraphQLServer()
                         .AddQueryType<Query>()
                         .AddMutationType<Mutation>()
-                        .AddType<User>()
-                        .AddErrorFilter(error =>
+                        .AddType<UserType>()
+                        .AddType<RegisterUserInputType>()
+                        .AddType<UpdateCreditsInputType>()
+                        .AddType<LoginInputType>()
+                        .AddType<AuthResponseType>()
+                        .AddAuthorizationHandler<DefaultAuthorizationHandler>()
+                        .AddErrorFilter<ErrorFilter>()
+                        .ModifyRequestOptions(opt =>
                         {
-                            // Обработка gRPC-ошибок
-                            if (error.Exception is RpcException rpcException)
-                            {
-                                return error.WithMessage(rpcException.Status.Detail)
-                                            .WithCode(rpcException.StatusCode.ToString());
-                            }
-
-                            // Отображаем детали других ошибок
-                            return error.WithMessage(error.Exception?.Message ?? error.Message);
+                            opt.IncludeExceptionDetails = true;
+                        })
+                        .ModifyOptions(opt =>
+                        {
+                            opt.DefaultBindingBehavior = BindingBehavior.Explicit;
+                            opt.StrictValidation = false;
                         });
+
+                    // Настраиваем endpoint
+                    services.Configure<GraphQLServerOptions>(options =>
+                    {
+                        options.Tool.Enable = true;
+                        options.EnableSchemaRequests = true;
+                        options.AllowedGetOperations = AllowedGetOperations.QueryAndMutation;
+                    });
                 })
                 .Configure(app =>
                 {
                     app.UseRouting();
+
+                    // Добавляем CORS middleware
+                    app.UseCors();
+
+                    // Добавляем middleware для аутентификации и авторизации
+                    app.UseAuthentication();
+                    app.UseAuthorization();
 
                     app.UseEndpoints(endpoints =>
                     {
@@ -55,7 +130,9 @@ public class Program
                         endpoints.MapGraphQL()
                             .WithOptions(new GraphQLServerOptions
                             {
-                                Tool = { Enable = true } // Включаем GraphiQL UI
+                                Tool = { Enable = true }, // Включаем GraphiQL UI
+                                EnableSchemaRequests = true, // Включаем запросы схемы
+                                AllowedGetOperations = AllowedGetOperations.QueryAndMutation // Разрешаем GET запросы для Query и Mutation
                             });
 
                         endpoints.MapGet("/", async context =>

@@ -2,7 +2,8 @@
 using Grpc.Net.Client;
 using HotChocolate;
 using UserService.Protos;
-using static UserService.Protos.UserService; // Добавляем using static
+using static UserService.Protos.UserService;
+using Grpc.Core;
 
 namespace ApiGateway.GraphQL
 {
@@ -16,15 +17,61 @@ namespace ApiGateway.GraphQL
             _client = new UserServiceClient(channel);
         }
 
-        public async Task<string> RegisterUser([Argument] RegisterUserInput input)
+        public async Task<AuthResponse> RegisterUser([Argument] RegisterUserInput input)
         {
-            var response = await _client.RegisterUserAsync(new RegisterUserRequest
+            try
             {
-                Username = input.Username,
-                Email = input.Email,
-                Password = input.Password
-            });
-            return response.UserId;
+                var response = await _client.RegisterUserAsync(new RegisterUserRequest
+                {
+                    Username = input.Username,
+                    Email = input.Email,
+                    Password = input.Password
+                });
+
+                return new AuthResponse
+                {
+                    Success = true,
+                    Message = "Пользователь успешно зарегистрирован",
+                    UserId = response.UserId,
+                    Token = response.Token
+                };
+            }
+            catch (RpcException ex)
+            {
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = ex.Status.Detail ?? "Ошибка при регистрации пользователя"
+                };
+            }
+        }
+
+        public async Task<AuthResponse> Login([Argument] LoginInput input)
+        {
+            try
+            {
+                var response = await _client.LoginAsync(new LoginRequest
+                {
+                    Email = input.Email,
+                    Password = input.Password
+                });
+
+                return new AuthResponse
+                {
+                    Success = true,
+                    Message = "Успешный вход в систему",
+                    UserId = response.UserId,
+                    Token = response.Token
+                };
+            }
+            catch (RpcException ex)
+            {
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = ex.Status.Detail ?? "Ошибка при входе в систему"
+                };
+            }
         }
 
         public async Task<User> GetUserById([Argument] string userId)
