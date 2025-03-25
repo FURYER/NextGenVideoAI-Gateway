@@ -35,8 +35,10 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_SSH_KEY }}
-          key_type: ed25519
+          debug: true
           script: |
+            echo "Current directory: $(pwd)"
+            echo "Directory contents: $(ls -la)"
             cd /var/www/services/nextgen-video-ai
             docker-compose pull
             docker-compose up -d
