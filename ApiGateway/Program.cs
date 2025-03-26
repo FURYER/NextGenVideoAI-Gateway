@@ -57,10 +57,10 @@ public class Program
                             ValidateAudience = true,
                             ValidateLifetime = true,
                             ValidateIssuerSigningKey = true,
-                            ValidIssuer = Environment.GetEnvironmentVariable("Jwt__Issuer"),
-                            ValidAudience = Environment.GetEnvironmentVariable("Jwt__Audience"),
+                            ValidIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER"),
+                            ValidAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
                             IssuerSigningKey = new SymmetricSecurityKey(
-                                Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("Jwt__Key")!)
+                                Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("JWT_KEY")!)
                             )
                         };
                     });
@@ -126,7 +126,6 @@ public class Program
                     {
                         listenOptions.UseHttps(httpsOptions =>
                         {
-                            var certificatePath = Environment.GetEnvironmentVariable("CERTIFICATE_PATH");
                             var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
 
                             // Создаем SecureString из пароля
@@ -138,7 +137,7 @@ public class Program
 
                             // Загружаем сертификат
                             httpsOptions.ServerCertificate = new X509Certificate2(
-                                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
+                                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "certs/certificate.pfx"),
                                 securePassword
                             );
                         });
