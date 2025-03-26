@@ -13,7 +13,13 @@ namespace ApiGateway.GraphQL
 
         public UserResolver()
         {
-            var channel = GrpcChannel.ForAddress("https://localhost:5009");
+            var userServiceUrl = Environment.GetEnvironmentVariable("USER_SERVICE_URL");
+            if (string.IsNullOrEmpty(userServiceUrl))
+            {
+                throw new ArgumentNullException("USER_SERVICE_URL environment variable is not set");
+            }
+
+            var channel = GrpcChannel.ForAddress(userServiceUrl);
             _client = new UserServiceClient(channel);
         }
 
