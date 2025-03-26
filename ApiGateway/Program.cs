@@ -120,9 +120,7 @@ public class Program
                 })
                 .ConfigureKestrel(serverOptions =>
                 {
-                    var httpsPort = int.Parse(Environment.GetEnvironmentVariable("GATEWAY_PORT")!);
-                    Console.WriteLine(httpsPort);
-                    serverOptions.ListenAnyIP(httpsPort, listenOptions =>
+                    serverOptions.ListenAnyIP(8000, listenOptions =>
                     {
                         listenOptions.UseHttps(httpsOptions =>
                         {
