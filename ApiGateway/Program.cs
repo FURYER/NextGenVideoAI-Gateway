@@ -131,7 +131,7 @@ public class Program
                         listenOptions.UseHttps(httpsOptions =>
                         {
                             var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
-                            var certificatePath = Environment.GetEnvironmentVariable("CERTIFICATE_PATH");
+                            var certificatePath = $"certs/{Environment.GetEnvironmentVariable("CERTIFICATE_NAME")}";
 
                             // Создаем SecureString из пароля
                             var securePassword = new System.Security.SecureString();
