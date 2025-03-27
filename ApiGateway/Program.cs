@@ -47,7 +47,8 @@ public class Program
                     // Настраиваем Data Protection API
                     services.AddDataProtection()
                         .SetApplicationName("Gateway")
-                        .UseEphemeralDataProtectionProvider(); // Используем временное хранилище в памяти
+                        .PersistKeysToFileSystem(new DirectoryInfo("/app/keys")) // Сохраняем ключи в директорию
+                        .SetDefaultKeyLifetime(TimeSpan.FromDays(30)); // Увеличиваем время жизни ключа
 
                     // Настраиваем аутентификацию JWT
                     services.AddAuthentication(options =>

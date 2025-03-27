@@ -17,4 +17,5 @@ RUN dotnet publish "ApiGateway/ApiGateway.csproj" -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
-ENTRYPOINT ["dotnet", "ApiGateway.dll"] 
+RUN mkdir -p /app/keys && chmod 700 /app/keys
+ENTRYPOINT ["dotnet", "ApiGateway.dll"]
