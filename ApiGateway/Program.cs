@@ -16,6 +16,7 @@ using HotChocolate.Types.Pagination;
 using System.Security.Cryptography.X509Certificates;
 using System.IO;
 using System.Security.Cryptography;
+using Microsoft.AspNetCore.DataProtection;
 
 public class Program
 {
@@ -42,6 +43,11 @@ public class Program
 
                     // Добавляем HttpContextAccessor
                     services.AddHttpContextAccessor();
+
+                    // Настраиваем Data Protection API
+                    services.AddDataProtection()
+                        .SetApplicationName("Gateway")
+                        .UseEphemeralDataProtectionProvider(); // Используем временное хранилище в памяти
 
                     // Настраиваем аутентификацию JWT
                     services.AddAuthentication(options =>
@@ -125,6 +131,7 @@ public class Program
                         listenOptions.UseHttps(httpsOptions =>
                         {
                             var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
+                            var certificatePath = Environment.GetEnvironmentVariable("CERTIFICATE_PATH");
 
                             // Создаем SecureString из пароля
                             var securePassword = new System.Security.SecureString();
@@ -135,7 +142,7 @@ public class Program
 
                             // Загружаем сертификат
                             httpsOptions.ServerCertificate = new X509Certificate2(
-                                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "certs/certificate.pfx"),
+                                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
                                 securePassword
                             );
                         });
