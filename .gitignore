@@ -38,3 +38,6 @@ TestResults/
 *.log
 *.tmp
 *.temp
+
+# Ключи защиты данных
+ApiGateway/keys/

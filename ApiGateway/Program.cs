@@ -17,6 +17,7 @@ using System.Security.Cryptography.X509Certificates;
 using System.IO;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
 
 public class Program
 {
@@ -45,10 +46,26 @@ public class Program
                     services.AddHttpContextAccessor();
 
                     // Настраиваем Data Protection API
+                    var dataProtectionPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "keys");
+
+                    var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
+                    var certificatePath = $"certs/{Environment.GetEnvironmentVariable("CERTIFICATE_NAME")}";
+
+                    // Создаем SecureString из пароля
+                    var securePassword = new System.Security.SecureString();
+                    foreach (char c in certificatePassword!)
+                    {
+                        securePassword.AppendChar(c);
+                    }
+
                     services.AddDataProtection()
                         .SetApplicationName("Gateway")
-                        .PersistKeysToFileSystem(new DirectoryInfo("/app/keys")) // Сохраняем ключи в директорию
-                        .SetDefaultKeyLifetime(TimeSpan.FromDays(30)); // Увеличиваем время жизни ключа
+                        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
+                        .ProtectKeysWithCertificate(new X509Certificate2(
+                        System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
+                        securePassword
+                    ))
+                        .SetDefaultKeyLifetime(TimeSpan.FromDays(30));
 
                     // Настраиваем аутентификацию JWT
                     services.AddAuthentication(options =>
@@ -124,6 +141,14 @@ public class Program
                         options.EnableSchemaRequests = true;
                         options.AllowedGetOperations = AllowedGetOperations.QueryAndMutation;
                     });
+
+                    // Настраиваем логирование Kestrel
+                    services.AddLogging(logging =>
+                    {
+                        logging.ClearProviders();
+                        logging.AddConsole();
+                        logging.AddDebug();
+                    });
                 })
                 .ConfigureKestrel(serverOptions =>
                 {
@@ -141,13 +166,18 @@ public class Program
                                 securePassword.AppendChar(c);
                             }
 
-                            // Загружаем сертификат
                             httpsOptions.ServerCertificate = new X509Certificate2(
                                 System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
                                 securePassword
                             );
                         });
                     });
+                })
+                .ConfigureLogging(logging =>
+                {
+                    logging.ClearProviders();
+                    logging.AddConsole();
+                    logging.AddDebug();
                 })
                 .Configure(app =>
                 {
