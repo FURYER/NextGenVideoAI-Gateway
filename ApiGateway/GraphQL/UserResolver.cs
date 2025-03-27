@@ -19,7 +19,14 @@ namespace ApiGateway.GraphQL
                 throw new ArgumentNullException("USER_SERVICE_URL environment variable is not set");
             }
 
-            var channel = GrpcChannel.ForAddress(userServiceUrl);
+            var channel = GrpcChannel.ForAddress(userServiceUrl, new GrpcChannelOptions
+            {
+                HttpHandler = new System.Net.Http.SocketsHttpHandler
+                {
+                    EnableMultipleHttp2Connections = true
+                },
+                Credentials = ChannelCredentials.Insecure // Разрешаем незащищенное соединение
+            });
             _client = new UserServiceClient(channel);
         }
 
