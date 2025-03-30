@@ -4,16 +4,34 @@ using HotChocolate.Types;
 namespace ApiGateway.GraphQL
 {
     [GraphQLDescription("Корневой тип запросов")]
-    public class Query
+    public class Query : ObjectType
     {
-        [Authorize] // Требуем авторизацию для этого запроса
-        [GraphQLDescription("Получить пользователя по ID")]
-        public async Task<User> GetUser([Service] UserResolver resolver, string id)
+        protected override void Configure(IObjectTypeDescriptor descriptor)
         {
-            return await resolver.GetUserById(id);
-        }
+            descriptor.Field("getChats")
+                .Argument("userId", a => a.Type<NonNullType<StringType>>())
+                .Type<ListType<NonNullType<ChatType>>>()
+                .ResolveWith<ChatResolver>(r => r.GetChats(default!))
+                .Authorize();
 
-        [GraphQLDescription("Получить версию API")]
-        public string Version() => "1.0.0";
+            descriptor.Field("getChatMessages")
+                .Argument("chatId", a => a.Type<NonNullType<StringType>>())
+                .Type<ListType<NonNullType<ChatMessageType>>>()
+                .ResolveWith<ChatResolver>(r => r.GetChatMessages(default!))
+                .Authorize();
+
+            descriptor.Field("getMessage")
+                .Argument("chatId", a => a.Type<NonNullType<StringType>>())
+                .Argument("content", a => a.Type<NonNullType<StringType>>())
+                .Type<NonNullType<ChatMessageType>>()
+                .ResolveWith<ChatResolver>(r => r.GetMessage(default!, default!))
+                .Authorize();
+
+            descriptor.Field("streamChat")
+                .Argument("input", a => a.Type<NonNullType<StreamChatInputType>>())
+                .Type<NonNullType<ListType<NonNullType<ChatStreamResponseType>>>>()
+                .ResolveWith<ChatResolver>(r => r.StreamChat(default!))
+                .Authorize();
+        }
     }
 }

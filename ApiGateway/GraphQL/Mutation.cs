@@ -7,22 +7,55 @@ namespace ApiGateway.GraphQL
 {
     public class Mutation
     {
-        [Microsoft.AspNetCore.Authorization.Authorize(Policy = "AllowAnonymous")]
+        [HotChocolate.Authorization.Authorize(Policy = "AllowAnonymous")]
         public async Task<AuthResponse> RegisterUser([Service] UserResolver resolver, RegisterUserInput input)
         {
             return await resolver.RegisterUser(input);
         }
 
-        [Microsoft.AspNetCore.Authorization.Authorize(Policy = "AllowAnonymous")]
+        [HotChocolate.Authorization.Authorize(Policy = "AllowAnonymous")]
         public async Task<AuthResponse> Login([Service] UserResolver resolver, LoginInput input)
         {
             return await resolver.Login(input);
         }
 
-        [HotChocolate.Authorization.Authorize]
-        public async Task<double> UpdateCredits([Service] UserResolver resolver, UpdateCreditsInput input)
+        [HotChocolate.Authorization.Authorize(Policy = "AllowAnonymous")]
+        public async Task<AuthResponse> RefreshToken([Service] UserResolver resolver, string refreshToken)
         {
-            return await resolver.UpdateCredits(input);
+            return await resolver.RefreshToken(refreshToken);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<Chat> CreateChat([Service] ChatResolver resolver, string userId)
+        {
+            return await resolver.CreateChat(userId);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<ChatMessage> SendMessage([Service] ChatResolver resolver, string chatId, string content, string userId)
+        {
+            return await resolver.SendMessage(chatId, content, userId);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<bool> Logout([Service] UserResolver resolver, [GlobalState] string? accessToken)
+        {
+            return await resolver.Logout(accessToken);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async IAsyncEnumerable<ChatStreamResponse> StreamChat([Service] ChatResolver resolver, StreamChatInput input)
+        {
+            await foreach (var response in resolver.StreamChat(input))
+            {
+                yield return response;
+            }
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<Chat> GenerateChatTitle([Service] ChatResolver resolver, string chatId)
+        {
+            return await resolver.GenerateChatTitle(chatId);
         }
     }
 }

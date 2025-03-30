@@ -50,6 +50,9 @@ namespace ApiGateway.GraphQL
             descriptor.Description("Входные данные для входа в систему");
             descriptor.Field(f => f.Email).Type<NonNullType<StringType>>().Description("Email пользователя");
             descriptor.Field(f => f.Password).Type<NonNullType<StringType>>().Description("Пароль пользователя");
+            descriptor.Field(f => f.RememberMe).Type<BooleanType>().Description("Запомнить пользователя");
+            descriptor.Field(f => f.TwoFactorCode).Type<StringType>().Description("Код двухфакторной аутентификации");
+            descriptor.Field(f => f.TwoFactorSecret).Type<StringType>().Description("Секретный ключ для 2FA");
         }
     }
 
@@ -57,23 +60,9 @@ namespace ApiGateway.GraphQL
     {
         public string? Email { get; set; }
         public string? Password { get; set; }
-    }
-
-    // Credits types
-    public class UpdateCreditsInputType : InputObjectType<UpdateCreditsInput>
-    {
-        protected override void Configure(IInputObjectTypeDescriptor<UpdateCreditsInput> descriptor)
-        {
-            descriptor.Description("Входные данные для обновления кредитов");
-            descriptor.Field(f => f.UserId).Type<NonNullType<StringType>>().Description("ID пользователя");
-            descriptor.Field(f => f.Amount).Type<NonNullType<FloatType>>().Description("Сумма кредитов");
-        }
-    }
-
-    public class UpdateCreditsInput
-    {
-        public string? UserId { get; set; }
-        public double Amount { get; set; }
+        public string? TwoFactorCode { get; set; }
+        public string? TwoFactorSecret { get; set; }
+        public bool RememberMe { get; set; }
     }
 
     // Authentication types
@@ -84,8 +73,11 @@ namespace ApiGateway.GraphQL
             descriptor.Description("Ответ на операции аутентификации");
             descriptor.Field(f => f.Success).Type<NonNullType<BooleanType>>().Description("Успешность операции");
             descriptor.Field(f => f.Message).Type<StringType>().Description("Сообщение об операции");
-            descriptor.Field(f => f.Token).Type<StringType>().Description("JWT токен");
+            descriptor.Field(f => f.AccessToken).Type<StringType>().Description("JWT токен доступа");
+            descriptor.Field(f => f.RefreshToken).Type<StringType>().Description("JWT токен обновления");
             descriptor.Field(f => f.UserId).Type<StringType>().Description("ID пользователя");
+            descriptor.Field(f => f.TwoFactorSecret).Type<StringType>().Description("Секретный код для 2FA");
+            descriptor.Field(f => f.Username).Type<StringType>().Description("Имя пользователя");
         }
     }
 
@@ -93,7 +85,10 @@ namespace ApiGateway.GraphQL
     {
         public bool Success { get; set; }
         public string? Message { get; set; }
-        public string? Token { get; set; }
+        public string? AccessToken { get; set; }
+        public string? RefreshToken { get; set; }
         public string? UserId { get; set; }
+        public string? TwoFactorSecret { get; set; }
+        public string? Username { get; set; }
     }
 }

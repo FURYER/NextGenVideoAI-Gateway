@@ -4,57 +4,107 @@ using HotChocolate;
 using UserService.Protos;
 using static UserService.Protos.UserService;
 using Grpc.Core;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using ApiGateway.Services;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace ApiGateway.GraphQL
 {
     public class UserResolver
     {
         private readonly UserServiceClient _client;
+        private readonly ITwoFactorAuthService _twoFactorAuthService;
+        private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ILogger<UserResolver> _logger;
 
-        public UserResolver()
+        public UserResolver(
+            ITwoFactorAuthService twoFactorAuthService,
+            IHttpContextAccessor httpContextAccessor,
+            ILogger<UserResolver> logger)
         {
             var userServiceUrl = Environment.GetEnvironmentVariable("USER_SERVICE_URL");
-            if (string.IsNullOrEmpty(userServiceUrl))
-            {
-                throw new ArgumentNullException("USER_SERVICE_URL environment variable is not set");
-            }
 
-            var channel = GrpcChannel.ForAddress(userServiceUrl, new GrpcChannelOptions
+            var channel = GrpcChannel.ForAddress(userServiceUrl!, new GrpcChannelOptions
             {
                 HttpHandler = new System.Net.Http.SocketsHttpHandler
                 {
                     EnableMultipleHttp2Connections = true
                 },
-                Credentials = ChannelCredentials.Insecure // Разрешаем незащищенное соединение
+                Credentials = ChannelCredentials.Insecure
             });
             _client = new UserServiceClient(channel);
+            _twoFactorAuthService = twoFactorAuthService;
+            _httpContextAccessor = httpContextAccessor;
+            _logger = logger;
+        }
+
+        private string GetDeviceInfo()
+        {
+            var context = _httpContextAccessor.HttpContext;
+            if (context == null) return "Unknown";
+
+            var userAgent = context.Request.Headers["User-Agent"].ToString();
+            var ipAddress = context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+            return $"{userAgent} ({ipAddress})";
+        }
+
+        private string GetIpAddress()
+        {
+            var context = _httpContextAccessor.HttpContext;
+            if (context == null) return "Unknown";
+
+            return context.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
         }
 
         public async Task<AuthResponse> RegisterUser([Argument] RegisterUserInput input)
         {
             try
             {
+                _logger.LogInformation("Attempting to register user with email: {Email}", input.Email);
+
                 var response = await _client.RegisterUserAsync(new RegisterUserRequest
                 {
                     Username = input.Username,
                     Email = input.Email,
-                    Password = input.Password
+                    Password = input.Password,
+                    DeviceInfo = GetDeviceInfo(),
+                    IpAddress = GetIpAddress()
                 });
+
+                // Генерируем секрет для 2FA
+                var twoFactorSecret = _twoFactorAuthService.GenerateSecret();
+
+                _logger.LogInformation("User successfully registered with ID: {UserId}", response.UserId);
 
                 return new AuthResponse
                 {
                     Success = true,
                     Message = "Пользователь успешно зарегистрирован",
                     UserId = response.UserId,
-                    Token = response.Token
+                    AccessToken = response.AccessToken,
+                    RefreshToken = response.RefreshToken,
+                    TwoFactorSecret = twoFactorSecret,
+                    Username = response.TokenInfo.Username
                 };
             }
             catch (RpcException ex)
             {
+                _logger.LogError(ex, "Error registering user: {Detail}", ex.Status.Detail);
                 return new AuthResponse
                 {
                     Success = false,
                     Message = ex.Status.Detail ?? "Ошибка при регистрации пользователя"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error during user registration");
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = "Внутренняя ошибка сервера при регистрации пользователя"
                 };
             }
         }
@@ -63,18 +113,112 @@ namespace ApiGateway.GraphQL
         {
             try
             {
+                _logger.LogInformation("Attempting to login user with email: {Email}", input.Email);
+
+                if (input == null)
+                {
+                    _logger.LogWarning("Login attempt with null input");
+                    return new AuthResponse
+                    {
+                        Success = false,
+                        Message = "Неверные входные данные"
+                    };
+                }
+
+                if (string.IsNullOrEmpty(input.Email) || string.IsNullOrEmpty(input.Password))
+                {
+                    _logger.LogWarning("Login attempt with empty email or password");
+                    return new AuthResponse
+                    {
+                        Success = false,
+                        Message = "Email и пароль не могут быть пустыми"
+                    };
+                }
+
                 var response = await _client.LoginAsync(new LoginRequest
                 {
                     Email = input.Email,
-                    Password = input.Password
+                    Password = input.Password,
+                    DeviceInfo = GetDeviceInfo(),
+                    IpAddress = GetIpAddress(),
+                    RememberMe = input.RememberMe
                 });
+
+                // Проверяем 2FA код, если он предоставлен
+                if (!string.IsNullOrEmpty(input.TwoFactorCode))
+                {
+                    if (string.IsNullOrEmpty(input.TwoFactorSecret))
+                    {
+                        _logger.LogWarning("2FA code provided but no secret");
+                        return new AuthResponse
+                        {
+                            Success = false,
+                            Message = "Необходим секретный ключ для 2FA"
+                        };
+                    }
+
+                    if (!_twoFactorAuthService.ValidateCode(input.TwoFactorSecret, input.TwoFactorCode))
+                    {
+                        _logger.LogWarning("Invalid 2FA code for user: {Email}", input.Email);
+                        return new AuthResponse
+                        {
+                            Success = false,
+                            Message = "Неверный код двухфакторной аутентификации"
+                        };
+                    }
+                }
+
+                _logger.LogInformation("User successfully logged in: {Email}", input.Email);
+                _logger.LogDebug("Generated access token: {Token}", response.AccessToken);
+                _logger.LogDebug("Generated refresh token: {Token}", response.RefreshToken);
 
                 return new AuthResponse
                 {
                     Success = true,
                     Message = "Успешный вход в систему",
                     UserId = response.UserId,
-                    Token = response.Token
+                    AccessToken = response.AccessToken,
+                    RefreshToken = response.RefreshToken,
+                    Username = response.TokenInfo.Username
+                };
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "RPC error during login: {Detail}", ex.Status.Detail);
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = ex.Status.Detail ?? "Ошибка при входе в систему"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Unexpected error during login");
+                return new AuthResponse
+                {
+                    Success = false,
+                    Message = "Внутренняя ошибка сервера при входе в систему"
+                };
+            }
+        }
+
+        public async Task<AuthResponse> RefreshToken([Argument] string refreshToken)
+        {
+            try
+            {
+                var response = await _client.RefreshTokenAsync(new RefreshTokenRequest
+                {
+                    RefreshToken = refreshToken
+                });
+
+                return new AuthResponse
+                {
+                    Success = true,
+                    Message = "Токен успешно обновлен",
+                    AccessToken = response.AccessToken,
+                    RefreshToken = response.RefreshToken,
+                    Username = response.TokenInfo.Username,
+                    UserId = response.TokenInfo.UserId
                 };
             }
             catch (RpcException ex)
@@ -82,43 +226,38 @@ namespace ApiGateway.GraphQL
                 return new AuthResponse
                 {
                     Success = false,
-                    Message = ex.Status.Detail ?? "Ошибка при входе в систему"
+                    Message = ex.Status.Detail ?? "Ошибка при обновлении токена"
                 };
             }
         }
 
-        public async Task<User> GetUserById([Argument] string userId)
+        public async Task<bool> Logout([GlobalState] string? accessToken)
         {
-            // Валидация userId
-            if (!Guid.TryParse(userId, out _))
+            if (!string.IsNullOrEmpty(accessToken))
             {
-                throw new ArgumentException("Invalid user_id format. Must be a valid UUID.");
+                var jwtToken = new JwtSecurityTokenHandler().ReadToken(accessToken) as JwtSecurityToken;
+                if (jwtToken != null)
+                {
+                    var userId = jwtToken.Claims.FirstOrDefault(c => c.Type == "userId")?.Value;
+                    if (userId != null)
+                    {
+                        try
+                        {
+                            var response = await _client.RevokeTokenAsync(new RevokeTokenRequest
+                            {
+                                Token = accessToken,
+                                UserId = userId
+                            });
+                            return response.Success;
+                        }
+                        catch
+                        {
+                            return false;
+                        }
+                    }
+                }
             }
-
-            var response = await _client.GetUserByIdAsync(new GetUserByIdRequest { UserId = userId });
-            return new User
-            {
-                Id = response.UserId,
-                Username = response.Username,
-                Email = response.Email,
-                Credits = response.Credits
-            };
-        }
-
-        public async Task<double> UpdateCredits([Argument] UpdateCreditsInput input)
-        {
-            // Валидация userId
-            if (!Guid.TryParse(input.UserId, out _))
-            {
-                throw new ArgumentException("Invalid user_id format. Must be a valid UUID.");
-            }
-
-            var response = await _client.UpdateCreditsAsync(new UpdateCreditsRequest
-            {
-                UserId = input.UserId,
-                Amount = (float)input.Amount
-            });
-            return response.NewBalance;
+            return false;
         }
     }
 }

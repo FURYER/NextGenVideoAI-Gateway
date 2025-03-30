@@ -18,6 +18,14 @@ using System.IO;
 using System.Security.Cryptography;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption.ConfigurationModel;
+using Microsoft.AspNetCore.Antiforgery;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.RateLimiting;
+using ApiGateway.Services;
+using Microsoft.Extensions.Caching.Distributed;
+using Microsoft.AspNetCore.WebSockets;
+using HotChocolate.AspNetCore.Subscriptions;
+using Microsoft.AspNetCore.Builder;
 
 public class Program
 {
@@ -41,6 +49,7 @@ public class Program
                 {
                     // Регистрируем UserResolver в DI
                     services.AddScoped<UserResolver>();
+                    services.AddScoped<ChatResolver>();
 
                     // Добавляем HttpContextAccessor
                     services.AddHttpContextAccessor();
@@ -81,11 +90,36 @@ public class Program
                             ValidateAudience = true,
                             ValidateLifetime = true,
                             ValidateIssuerSigningKey = true,
+                            ClockSkew = TimeSpan.Zero,
                             ValidIssuer = Environment.GetEnvironmentVariable("JWT_ISSUER"),
                             ValidAudience = Environment.GetEnvironmentVariable("JWT_AUDIENCE"),
                             IssuerSigningKey = new SymmetricSecurityKey(
                                 Encoding.UTF8.GetBytes(Environment.GetEnvironmentVariable("JWT_KEY")!)
                             )
+                        };
+                        options.Events = new JwtBearerEvents
+                        {
+                            OnAuthenticationFailed = context =>
+                            {
+                                if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
+                                {
+                                    context.Response.Headers["Token-Expired"] = "true";
+                                    context.Response.StatusCode = 401;
+                                }
+                                return Task.CompletedTask;
+                            },
+                            OnChallenge = context =>
+                            {
+                                context.HandleResponse();
+                                context.Response.StatusCode = 401;
+                                context.Response.ContentType = "application/json";
+                                var result = System.Text.Json.JsonSerializer.Serialize(new
+                                {
+                                    error = "Unauthorized",
+                                    message = "Invalid token or token expired"
+                                });
+                                return context.Response.WriteAsync(result);
+                            }
                         };
                     });
 
@@ -97,9 +131,9 @@ public class Program
                             .RequireAuthenticatedUser()
                             .Build();
 
-                        // Добавляем политику для анонимного доступа
+                        // Добавляем политику AllowAnonymous для обхода авторизации
                         options.AddPolicy("AllowAnonymous", policy =>
-                            policy.RequireAssertion(context => true));
+                            policy.RequireAssertion(_ => true));
                     });
 
                     // Добавляем CORS
@@ -107,9 +141,33 @@ public class Program
                     {
                         options.AddDefaultPolicy(builder =>
                         {
-                            builder.AllowAnyOrigin()
-                                   .AllowAnyMethod()
-                                   .AllowAnyHeader();
+                            builder.WithOrigins(Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(',') ?? Array.Empty<string>())
+                                   .WithMethods("GET", "POST", "OPTIONS")
+                                   .WithHeaders("Authorization", "Content-Type")
+                                   .AllowCredentials()
+                                   .SetIsOriginAllowedToAllowWildcardSubdomains();
+                        });
+                    });
+
+                    // Добавляем сервисы
+                    services.AddSingleton<ITwoFactorAuthService, TwoFactorAuthService>();
+
+                    // Добавляем защиту от CSRF
+                    services.AddAntiforgery(options =>
+                    {
+                        options.Cookie.Name = "XSRF-TOKEN";
+                        options.Cookie.HttpOnly = false;
+                        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+                        options.Cookie.SameSite = SameSiteMode.Strict;
+                    });
+
+                    // Добавляем rate limiting
+                    services.AddRateLimiter(options =>
+                    {
+                        options.AddFixedWindowLimiter("GlobalLimiter", fixedOptions =>
+                        {
+                            fixedOptions.PermitLimit = 100;
+                            fixedOptions.Window = TimeSpan.FromMinutes(1);
                         });
                     });
 
@@ -117,11 +175,15 @@ public class Program
                     services.AddGraphQLServer()
                         .AddQueryType<Query>()
                         .AddMutationType<Mutation>()
+                        .AddSubscriptionType<Subscription>()
                         .AddType<UserType>()
                         .AddType<RegisterUserInputType>()
-                        .AddType<UpdateCreditsInputType>()
                         .AddType<LoginInputType>()
                         .AddType<AuthResponseType>()
+                        .AddType<ChatMessageType>()
+                        .AddType<SenderTypeType>()
+                        .AddType<ChatStreamResponseType>()
+                        .AddType<StreamChatInputType>()
                         .AddAuthorizationHandler<DefaultAuthorizationHandler>()
                         .AddErrorFilter<ErrorFilter>()
                         .ModifyRequestOptions(opt =>
@@ -132,14 +194,119 @@ public class Program
                         {
                             opt.DefaultBindingBehavior = BindingBehavior.Explicit;
                             opt.StrictValidation = false;
+                        })
+                        .AddErrorFilter(error =>
+                        {
+                            if (error.Exception is RpcException rpcException)
+                            {
+                                return ErrorBuilder.New()
+                                    .SetMessage("Ошибка при получении ответа от сервиса чата")
+                                    .SetCode("CHAT_SERVICE_ERROR")
+                                    .SetException(error.Exception)
+                                    .Build();
+                            }
+                            return error;
                         });
 
                     // Настраиваем endpoint
                     services.Configure<GraphQLServerOptions>(options =>
                     {
                         options.Tool.Enable = true;
-                        options.EnableSchemaRequests = true;
+                        options.EnableSchemaRequests = false;
                         options.AllowedGetOperations = AllowedGetOperations.QueryAndMutation;
+                    });
+
+                    // Настраиваем WebSocket аутентификацию
+                    services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
+                    {
+                        options.Events = new JwtBearerEvents
+                        {
+                            OnMessageReceived = context =>
+                            {
+                                // Логируем путь и заголовки для диагностики
+                                Console.WriteLine($"Path: {context.Request.Path}, Method: {context.Request.Method}");
+
+                                // Проверяем WebSocket соединения для GraphQL
+                                if (context.Request.Path.StartsWithSegments("/graphql/ws"))
+                                {
+                                    Console.WriteLine("WebSocket connection detected");
+                                    string? token = null;
+
+                                    // Ищем токен в connectionParams authorization
+                                    if (context.Request.Query.TryGetValue("authorization", out var authQuery))
+                                    {
+                                        Console.WriteLine($"Found token in query: {authQuery}");
+                                        token = authQuery.ToString().Replace("Bearer ", "");
+                                    }
+                                    // Проверяем заголовок Authorization
+                                    else
+                                    {
+                                        var authHeader = context.Request.Headers["Authorization"].ToString();
+                                        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
+                                        {
+                                            Console.WriteLine($"Found token in Authorization header: {authHeader}");
+                                            token = authHeader.Substring(7);
+                                        }
+                                    }
+
+                                    // Если токен найден, сохраняем его и в контексте
+                                    if (token != null)
+                                    {
+                                        context.Token = token;
+                                        // Важно: сохраняем токен в HttpContext.Items для обработчика авторизации
+                                        context.HttpContext.Items["WebSocketAuthToken"] = token;
+                                        return Task.CompletedTask;
+                                    }
+
+                                    // Проверяем заголовок Sec-WebSocket-Protocol 
+                                    if (context.Request.Headers.ContainsKey("Sec-WebSocket-Protocol"))
+                                    {
+                                        Console.WriteLine($"WebSocket Protocols: {context.Request.Headers["Sec-WebSocket-Protocol"]}");
+                                        var protocols = context.Request.Headers["Sec-WebSocket-Protocol"].ToString().Split(',');
+                                        foreach (var protocol in protocols)
+                                        {
+                                            var trimmedProtocol = protocol.Trim();
+                                            if (trimmedProtocol.StartsWith("Bearer "))
+                                            {
+                                                Console.WriteLine($"Found token in protocol: {trimmedProtocol}");
+                                                token = trimmedProtocol.Substring(7);
+                                                context.Token = token;
+                                                context.HttpContext.Items["WebSocketAuthToken"] = token;
+                                                return Task.CompletedTask;
+                                            }
+                                        }
+                                    }
+
+                                    // Для диагностики проверяем все заголовки
+                                    foreach (var header in context.Request.Headers)
+                                    {
+                                        Console.WriteLine($"Header: {header.Key} = {header.Value}");
+                                    }
+
+                                    // Временный хак для отладки: проверка всех параметров запроса
+                                    foreach (var param in context.Request.Query)
+                                    {
+                                        Console.WriteLine($"Query param: {param.Key} = {param.Value}");
+                                        if (param.Key.Contains("token") || param.Key.Contains("auth"))
+                                        {
+                                            token = param.Value.ToString().Replace("Bearer ", "");
+                                            context.Token = token;
+                                            context.HttpContext.Items["WebSocketAuthToken"] = token;
+                                            return Task.CompletedTask;
+                                        }
+                                    }
+                                }
+
+                                // Для любых других запросов проверяем стандартный заголовок
+                                var authHeaderDefault = context.Request.Headers["Authorization"].ToString();
+                                if (!string.IsNullOrEmpty(authHeaderDefault) && authHeaderDefault.StartsWith("Bearer "))
+                                {
+                                    context.Token = authHeaderDefault.Substring(7);
+                                }
+
+                                return Task.CompletedTask;
+                            }
+                        };
                     });
 
                     // Настраиваем логирование Kestrel
@@ -183,6 +350,13 @@ public class Program
                 {
                     app.UseRouting();
 
+                    // Добавляем WebSocket middleware с настройками
+                    app.UseWebSockets(new WebSocketOptions
+                    {
+                        KeepAliveInterval = TimeSpan.FromMinutes(2),
+                        AllowedOrigins = { "*" }
+                    });
+
                     // Добавляем CORS middleware
                     app.UseCors();
 
@@ -192,8 +366,11 @@ public class Program
 
                     app.UseEndpoints(endpoints =>
                     {
+                        // Добавляем WebSocket endpoint для GraphQL с явным указанием пути
+                        endpoints.MapGraphQLWebSocket("/graphql/ws");
+
                         // Настраиваем GraphQL endpoint и включаем GraphiQL UI
-                        endpoints.MapGraphQL()
+                        endpoints.MapGraphQL("/graphql")
                             .WithOptions(new GraphQLServerOptions
                             {
                                 Tool = { Enable = true }, // Включаем GraphiQL UI

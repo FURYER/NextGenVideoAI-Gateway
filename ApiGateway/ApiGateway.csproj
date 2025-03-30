@@ -18,6 +18,8 @@
     <PackageReference Include="HotChocolate.Data" Version="13.0.5" />
     <PackageReference Include="HotChocolate.Authorization" Version="13.0.5" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="9.0.3" />
+    <PackageReference Include="System.Linq.Async" Version="6.0.1" />
+    <PackageReference Include="System.Reactive" Version="6.0.1" />
   </ItemGroup>
 
 <ItemGroup>
@@ -28,6 +30,7 @@
 
 <ItemGroup>
     <Protobuf Include="Protos/user.proto" GrpcServices="Client" />
-  </ItemGroup>
+    <Protobuf Include="Protos/chat.proto" GrpcServices="Client" />
+</ItemGroup>
 
 </Project>

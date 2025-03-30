@@ -1,0 +1,145 @@
+syntax = "proto3";
+
+option csharp_namespace = "NextGenVideoAI.ChatService.Api";
+
+package chat;
+
+service ChatService {
+  // Отправка сообщения
+  rpc SendMessage (SendMessageRequest) returns (SendMessageResponse);
+  
+  // Создание нового чата
+  rpc CreateChat (CreateChatRequest) returns (CreateChatResponse);
+  
+  // Получение сообщений чата
+  rpc GetChatMessages (GetChatMessagesRequest) returns (GetChatMessagesResponse);
+  
+  // Получение списка чатов пользователя
+  rpc GetUserChats (GetUserChatsRequest) returns (GetUserChatsResponse);
+
+  // Получение всех чатов
+  rpc GetChats (GetChatsRequest) returns (GetChatsResponse);
+
+  // Стриминг ответа от ИИ
+  rpc StreamChat (StreamChatRequest) returns (stream StreamChatResponse);
+
+  // Получение сообщения по содержимому
+  rpc GetMessage (GetMessageRequest) returns (GetMessageResponse);
+  
+  // Генерация заголовка чата на основе его содержимого
+  rpc GenerateChatTitle (GenerateChatTitleRequest) returns (GenerateChatTitleResponse);
+}
+
+message SendMessageRequest {
+  string chat_id = 1;
+  string content = 2;
+  string sender_id = 3;
+  SenderType sender_type = 4;
+}
+
+message SendMessageResponse {
+  string message_id = 1;
+  string content = 2;
+  string created_at = 3;
+}
+
+message CreateChatRequest {
+  string name = 1;
+  string user_id = 2;
+  string chat_context = 3;
+}
+
+message CreateChatResponse {
+  string chat_id = 1;
+  string name = 2;
+  string last_update = 3;
+}
+
+message GetChatMessagesRequest {
+  string chat_id = 1;
+  int32 page_size = 2;
+  int32 page_number = 3;
+}
+
+message ChatMessage {
+  string id = 1;
+  string content = 2;
+  string created_at = 3;
+  SenderType sender_type = 4;
+  string sender_id = 5;
+}
+
+message GetChatMessagesResponse {
+  repeated ChatMessage messages = 1;
+  int32 total_count = 2;
+}
+
+message GetUserChatsRequest {
+  string user_id = 1;
+  int32 page_size = 2;
+  int32 page_number = 3;
+}
+
+message ChatInfo {
+  string id = 1;
+  string name = 2;
+  string chat_context = 3;
+  string last_context_update_time = 4;
+  string last_update = 5;
+}
+
+message GetUserChatsResponse {
+  repeated ChatInfo chats = 1;
+  int32 total_count = 2;
+}
+
+enum SenderType {
+  USER = 0;
+  AI = 1;
+}
+
+message GetChatsRequest {
+  int32 page_size = 1;
+  int32 page_number = 2;
+}
+
+message GetChatsResponse {
+  repeated ChatInfo chats = 1;
+  int32 total_count = 2;
+}
+
+message StreamChatRequest {
+  string chat_id = 1;
+  string content = 2;
+  string user_id = 3;
+}
+
+message StreamChatResponse {
+  string content = 1;
+  bool is_final = 2;
+  string error = 3;
+}
+
+message GetMessageRequest {
+  string chat_id = 1;
+  string content = 2;
+}
+
+message GetMessageResponse {
+  string message_id = 1;
+  string content = 2;
+  string created_at = 3;
+  SenderType sender_type = 4;
+  string sender_id = 5;
+}
+
+message GenerateChatTitleRequest {
+  string chat_id = 1;
+}
+
+message GenerateChatTitleResponse {
+  string chat_id = 1;
+  string title = 2;
+  string last_message = 3;
+  string last_update = 4;
+} 

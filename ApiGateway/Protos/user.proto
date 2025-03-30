@@ -2,50 +2,99 @@ syntax = "proto3";
 
 option csharp_namespace = "UserService.Protos";
 
+// Добавляем новый тип для информации о токене
+message TokenInfo {
+  string token = 1;
+  string refresh_token = 2;
+  string device_info = 3;
+  string ip_address = 4;
+  string created_at = 5;
+  string expires_at = 6;
+  bool is_remember_me = 7;
+  string username = 8;
+  string user_id = 9;
+}
+
 service UserService {
+  // Существующие методы
   rpc RegisterUser (RegisterUserRequest) returns (RegisterUserResponse);
   rpc Login (LoginRequest) returns (LoginResponse);
-  rpc GetUserById (GetUserByIdRequest) returns (GetUserByIdResponse);
-  rpc UpdateCredits (UpdateCreditsRequest) returns (UpdateCreditsResponse);
+  rpc RefreshToken (RefreshTokenRequest) returns (RefreshTokenResponse);
+  
+  // Новые методы для работы с токенами
+  rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc RevokeToken (RevokeTokenRequest) returns (RevokeTokenResponse);
+  rpc RevokeAllUserTokens (RevokeAllUserTokensRequest) returns (RevokeAllUserTokensResponse);
 }
 
-message RegisterUserRequest {
-  string username = 1;
-  string email = 2;
-  string password = 3;
-}
-
-message RegisterUserResponse {
-  string user_id = 1;
-  string token = 2; // Добавляем токен
-}
-
+// Обновляем существующие сообщения
 message LoginRequest {
   string email = 1;
   string password = 2;
+  string device_info = 3;    // Добавляем
+  string ip_address = 4;     // Добавляем
+  bool remember_me = 5;      // Добавляем
 }
 
 message LoginResponse {
   string user_id = 1;
-  string token = 2;
+  string access_token = 2;
+  string refresh_token = 3;
+  TokenInfo token_info = 4;  // Добавляем
 }
 
-message GetUserByIdRequest {
+// Новые сообщения для работы с токенами
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  bool is_valid = 1;
+  string user_id = 2;
+  TokenInfo token_info = 3;
+}
+
+message RevokeTokenRequest {
+  string token = 1;
+  string user_id = 2;
+}
+
+message RevokeTokenResponse {
+  bool success = 1;
+  string message = 2;
+}
+
+message RevokeAllUserTokensRequest {
   string user_id = 1;
 }
 
-message GetUserByIdResponse {
-  string user_id = 1;
-  string username = 2;
-  string email = 3;
-  double credits = 4;
+message RevokeAllUserTokensResponse {
+  bool success = 1;
+  int32 revoked_count = 2;
 }
 
-message UpdateCreditsRequest {
-  string user_id = 1;
-  double amount = 2;
+// Обновляем существующие сообщения
+message RegisterUserRequest {
+  string username = 1;
+  string email = 2;
+  string password = 3;
+  string device_info = 4;    // Добавляем
+  string ip_address = 5;     // Добавляем
 }
 
-message UpdateCreditsResponse {
-  double new_balance = 1;
+message RegisterUserResponse {
+  string user_id = 1;
+  string access_token = 2;
+  string refresh_token = 3;
+  TokenInfo token_info = 4;  // Добавляем
+}
+
+message RefreshTokenRequest {
+  string refresh_token = 1;
+}
+
+message RefreshTokenResponse {
+  string access_token = 1;
+  string refresh_token = 2;
+  TokenInfo token_info = 3;  // Добавляем
 }
