@@ -186,6 +186,7 @@ public class Program
                         .AddType<StreamChatInputType>()
                         .AddAuthorizationHandler<DefaultAuthorizationHandler>()
                         .AddErrorFilter<ErrorFilter>()
+                        .AddDiagnosticEventListener<GraphQLDiagnosticEventListener>()
                         .ModifyRequestOptions(opt =>
                         {
                             opt.IncludeExceptionDetails = true;
