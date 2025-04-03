@@ -320,26 +320,37 @@ public class Program
                 })
                 .ConfigureKestrel(serverOptions =>
                 {
-                    serverOptions.ListenAnyIP(8000, listenOptions =>
+                    var environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
+
+                    if (environment == "Development")
                     {
-                        listenOptions.UseHttps(httpsOptions =>
+                        // В dev используем только HTTP
+                        serverOptions.ListenAnyIP(8000);
+                    }
+                    else
+                    {
+                        // В production используем HTTPS
+                        serverOptions.ListenAnyIP(8000, listenOptions =>
                         {
-                            var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
-                            var certificatePath = $"certs/{Environment.GetEnvironmentVariable("CERTIFICATE_NAME")}";
-
-                            // Создаем SecureString из пароля
-                            var securePassword = new System.Security.SecureString();
-                            foreach (char c in certificatePassword!)
+                            listenOptions.UseHttps(httpsOptions =>
                             {
-                                securePassword.AppendChar(c);
-                            }
+                                var certificatePassword = Environment.GetEnvironmentVariable("CERTIFICATE_PASSWORD");
+                                var certificatePath = $"certs/{Environment.GetEnvironmentVariable("CERTIFICATE_NAME")}";
 
-                            httpsOptions.ServerCertificate = new X509Certificate2(
-                                System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
-                                securePassword
-                            );
+                                // Создаем SecureString из пароля
+                                var securePassword = new System.Security.SecureString();
+                                foreach (char c in certificatePassword!)
+                                {
+                                    securePassword.AppendChar(c);
+                                }
+
+                                httpsOptions.ServerCertificate = new X509Certificate2(
+                                    System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
+                                    securePassword
+                                );
+                            });
                         });
-                    });
+                    }
                 })
                 .ConfigureLogging(logging =>
                 {
