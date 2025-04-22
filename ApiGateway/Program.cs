@@ -56,8 +56,9 @@ public class Program
                     AutoRegisterTemplate = true,
                     EmitEventFailure = EmitEventFailureHandling.WriteToSelfLog |
                           EmitEventFailureHandling.WriteToFailureSink,
-                    ModifyConnectionSettings = x => x.ServerCertificateValidationCallback(
-                        (o, certificate, chain, errors) => true) // Отключаем проверку SSL
+                    ModifyConnectionSettings = c => c
+                        .BasicAuthentication("elastic", "lSoBIBgQjc4nFQWArZBt")
+                        .ServerCertificateValidationCallback((o, cert, chain, errors) => true)
                 })
                 .Enrich.WithProperty("Application", "gateway")
                 .Enrich.FromLogContext()
