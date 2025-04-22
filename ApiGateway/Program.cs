@@ -27,6 +27,8 @@ using Microsoft.AspNetCore.WebSockets;
 using HotChocolate.AspNetCore.Subscriptions;
 using Microsoft.AspNetCore.Builder;
 using Prometheus;
+using Serilog;
+using Serilog.Sinks.Elasticsearch;
 
 public class Program
 {
@@ -40,6 +42,17 @@ public class Program
 
     public static IHostBuilder CreateHostBuilder(string[] args) =>
         Host.CreateDefaultBuilder(args)
+            .UseSerilog((context, services, configuration) => configuration
+                .ReadFrom.Configuration(context.Configuration)
+                .ReadFrom.Services(services)
+                .WriteTo.Console()
+                .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://elasticsearch:9200"))
+                {
+                    IndexFormat = "dotnet-logs-{0:yyyy.MM.dd}",
+                    AutoRegisterTemplate = true
+                })
+                .Enrich.WithProperty("Application", "gateway")
+                .Enrich.FromLogContext())
             .ConfigureAppConfiguration((hostingContext, config) =>
             {
                 config.AddEnvironmentVariables();
@@ -48,6 +61,16 @@ public class Program
             {
                 webBuilder.ConfigureServices(services =>
                 {
+                    Log.Logger = new LoggerConfiguration()
+                        .WriteTo.Console()
+                        .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://elasticsearch:9200"))
+                        {
+                            IndexFormat = "dotnet-logs-{0:yyyy.MM.dd}",
+                            AutoRegisterTemplate = true
+                        })
+                        .Enrich.WithProperty("Application", "gateway") // Замените на имя сервиса
+                        .CreateLogger();
+
                     // Регистрируем UserResolver в DI
                     services.AddScoped<UserResolver>();
                     services.AddScoped<ChatResolver>();
@@ -187,7 +210,9 @@ public class Program
                         .AddType<StreamChatInputType>()
                         .AddAuthorizationHandler<DefaultAuthorizationHandler>()
                         .AddErrorFilter<ErrorFilter>()
-                        .AddDiagnosticEventListener<GraphQLDiagnosticEventListener>()
+                        .AddDiagnosticEventListener(sp =>
+                            new LoggingDiagnosticEventListener(
+                                sp.GetRequiredService<ILogger<LoggingDiagnosticEventListener>>()))
                         .ModifyRequestOptions(opt =>
                         {
                             opt.IncludeExceptionDetails = true;
@@ -310,14 +335,6 @@ public class Program
                             }
                         };
                     });
-
-                    // Настраиваем логирование Kestrel
-                    services.AddLogging(logging =>
-                    {
-                        logging.ClearProviders();
-                        logging.AddConsole();
-                        logging.AddDebug();
-                    });
                 })
                 .ConfigureKestrel(serverOptions =>
                 {
@@ -352,12 +369,6 @@ public class Program
                             });
                         });
                     }
-                })
-                .ConfigureLogging(logging =>
-                {
-                    logging.ClearProviders();
-                    logging.AddConsole();
-                    logging.AddDebug();
                 })
                 .Configure(app =>
                 {
