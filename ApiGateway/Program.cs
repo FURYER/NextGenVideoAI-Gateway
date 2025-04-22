@@ -26,6 +26,7 @@ using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.AspNetCore.WebSockets;
 using HotChocolate.AspNetCore.Subscriptions;
 using Microsoft.AspNetCore.Builder;
+using Prometheus;
 
 public class Program
 {
@@ -361,6 +362,9 @@ public class Program
                 .Configure(app =>
                 {
                     app.UseRouting();
+
+                    app.UseMetricServer(); // Экспортирует по пути /metrics по умолчанию
+                    app.UseHttpMetrics(); // Собирает метрики HTTP-запросов
 
                     // Добавляем WebSocket middleware с настройками
                     app.UseWebSockets(new WebSocketOptions
