@@ -34,8 +34,12 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        Serilog.Debugging.SelfLog.Enable(Console.Error);
+
         // Загружаем .env файл
         Env.Load();
+
+        Log.Information("Приложение gateway запущено");
 
         CreateHostBuilder(args).Build().Run();
     }
@@ -49,10 +53,15 @@ public class Program
                 .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://elasticsearch:9200"))
                 {
                     IndexFormat = "dotnet-logs-{0:yyyy.MM.dd}",
-                    AutoRegisterTemplate = true
+                    AutoRegisterTemplate = true,
+                    EmitEventFailure = EmitEventFailureHandling.WriteToSelfLog |
+                          EmitEventFailureHandling.WriteToFailureSink,
+                    ModifyConnectionSettings = x => x.ServerCertificateValidationCallback(
+                        (o, certificate, chain, errors) => true) // Отключаем проверку SSL
                 })
                 .Enrich.WithProperty("Application", "gateway")
-                .Enrich.FromLogContext())
+                .Enrich.FromLogContext()
+                .MinimumLevel.Information())
             .ConfigureAppConfiguration((hostingContext, config) =>
             {
                 config.AddEnvironmentVariables();
@@ -61,16 +70,6 @@ public class Program
             {
                 webBuilder.ConfigureServices(services =>
                 {
-                    Log.Logger = new LoggerConfiguration()
-                        .WriteTo.Console()
-                        .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("http://elasticsearch:9200"))
-                        {
-                            IndexFormat = "dotnet-logs-{0:yyyy.MM.dd}",
-                            AutoRegisterTemplate = true
-                        })
-                        .Enrich.WithProperty("Application", "gateway") // Замените на имя сервиса
-                        .CreateLogger();
-
                     // Регистрируем UserResolver в DI
                     services.AddScoped<UserResolver>();
                     services.AddScoped<ChatResolver>();
