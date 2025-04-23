@@ -48,7 +48,7 @@ public class Program
                 .ReadFrom.Configuration(context.Configuration)
                 .ReadFrom.Services(services)
                 .WriteTo.Console()
-                .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri("https://elasticsearch:9200"))
+                .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(Environment.GetEnvironmentVariable("ELASTICSEARCH_URL")!))
                 {
                     IndexFormat = "dotnet-logs-{0:yyyy.MM.dd}",
                     AutoRegisterTemplate = true,
