@@ -39,8 +39,6 @@ public class Program
         // Загружаем .env файл
         Env.Load();
 
-        Log.Information("Приложение gateway запущено");
-
         CreateHostBuilder(args).Build().Run();
     }
 
