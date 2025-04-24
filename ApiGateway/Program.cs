@@ -29,6 +29,7 @@ using Microsoft.AspNetCore.Builder;
 using Prometheus;
 using Serilog;
 using Serilog.Sinks.Elasticsearch;
+using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
 
 public class Program
 {
@@ -92,11 +93,11 @@ public class Program
                     services.AddDataProtection()
                         .SetApplicationName("Gateway")
                         .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionPath))
-                        .ProtectKeysWithCertificate(new X509Certificate2(
-                        System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, certificatePath!),
-                        securePassword
-                    ))
-                        .SetDefaultKeyLifetime(TimeSpan.FromDays(30));
+                        .UseCryptographicAlgorithms(new AuthenticatedEncryptorConfiguration()
+                        {
+                            EncryptionAlgorithm = EncryptionAlgorithm.AES_256_CBC,
+                            ValidationAlgorithm = ValidationAlgorithm.HMACSHA256
+                        });
 
                     // Настраиваем аутентификацию JWT
                     services.AddAuthentication(options =>
