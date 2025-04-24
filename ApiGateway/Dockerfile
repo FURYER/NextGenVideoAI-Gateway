@@ -16,6 +16,10 @@ RUN dotnet publish "ApiGateway/ApiGateway.csproj" -c Release -o /app/publish
 # Финальный образ
 FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
 WORKDIR /app
+RUN apt-get update && apt-get install -y \
+    libgdiplus \
+    libc6-dev \
+    libssl-dev
 COPY --from=publish /app/publish .
 RUN mkdir -p /app/keys && chmod 700 /app/keys
 ENTRYPOINT ["dotnet", "ApiGateway.dll"]
