@@ -33,11 +33,11 @@ namespace ApiGateway.Services
             {
                 var factory = new ConnectionFactory
                 {
-                    HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost",
-                    Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT") ?? "5672"),
-                    UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME") ?? "guest",
-                    Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest",
-                    VirtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VIRTUALHOST") ?? "/"
+                    HostName = Environment.GetEnvironmentVariable("RABBITMQ_HOST"),
+                    Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT")!),
+                    UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME"),
+                    Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD"),
+                    VirtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VIRTUALHOST")
                 };
 
                 _connection = factory.CreateConnection();
