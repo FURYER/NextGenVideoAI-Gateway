@@ -30,6 +30,7 @@ using Prometheus;
 using Serilog;
 using Serilog.Sinks.Elasticsearch;
 using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
+using ApiGateway.GraphQL.Subscriptions;
 
 public class Program
 {
@@ -76,6 +77,9 @@ public class Program
 
                     // Добавляем HttpContextAccessor
                     services.AddHttpContextAccessor();
+
+                    // Регистрируем RabbitMQ сервис
+                    services.AddSingleton<IRabbitMQService, RabbitMQService>();
 
                     // Настраиваем Data Protection API
                     var dataProtectionPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "keys");
@@ -199,6 +203,7 @@ public class Program
                         .AddQueryType<Query>()
                         .AddMutationType<Mutation>()
                         .AddSubscriptionType<Subscription>()
+                        .AddTypeExtension<NotificationSubscription>()
                         .AddType<UserType>()
                         .AddType<RegisterUserInputType>()
                         .AddType<LoginInputType>()
@@ -207,6 +212,7 @@ public class Program
                         .AddType<SenderTypeType>()
                         .AddType<ChatStreamResponseType>()
                         .AddType<StreamChatInputType>()
+                        .AddType<NotificationType>()
                         .AddAuthorizationHandler<DefaultAuthorizationHandler>()
                         .AddErrorFilter<ErrorFilter>()
                         .AddDiagnosticEventListener(sp =>
@@ -232,7 +238,8 @@ public class Program
                                     .Build();
                             }
                             return error;
-                        });
+                        })
+                        .AddInMemorySubscriptions();
 
                     // Настраиваем endpoint
                     services.Configure<GraphQLServerOptions>(options =>
@@ -409,6 +416,10 @@ public class Program
                             await context.Response.WriteAsync("GraphQL API Gateway is running. Access GraphiQL at /graphql");
                         });
                     });
+
+                    // Стартуем RabbitMQ сервис для прослушивания сообщений
+                    var rabbitMQService = app.ApplicationServices.GetRequiredService<IRabbitMQService>();
+                    rabbitMQService.StartConsumingAsync().GetAwaiter().GetResult();
                 });
             });
 }

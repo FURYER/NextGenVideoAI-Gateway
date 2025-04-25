@@ -66,16 +66,49 @@ namespace ApiGateway.GraphQL
             }
         }
 
-        public async Task<IEnumerable<Chat>> GetChats(string userId)
+        public async Task<Chat?> GetChatById(string chatId)
         {
             try
             {
-                _logger.LogInformation("Получение чатов для пользователя {0}", userId);
+                _logger.LogInformation("Получение чата по ID {ChatId}", chatId);
+                var request = new GetChatByIdRequest
+                {
+                    ChatId = chatId
+                };
+                var response = await _client.GetChatByIdAsync(request);
+
+                if (response == null || string.IsNullOrEmpty(response.Id))
+                {
+                    _logger.LogWarning("Чат с ID {ChatId} не найден", chatId);
+                    return null;
+                }
+
+                _logger.LogInformation("Получен чат {ChatId} с названием {Title}", response.Id, response.Name);
+                return new Chat
+                {
+                    Id = response.Id,
+                    Title = response.Name,
+                    LastUpdate = DateTime.Parse(response.LastUpdate),
+                    Participants = new List<Participant>()
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении чата с ID {ChatId}", chatId);
+                throw;
+            }
+        }
+
+        public async Task<IEnumerable<Chat>> GetChats(string userId, int? skip = null, int? limit = null)
+        {
+            try
+            {
+                _logger.LogInformation("Получение чатов для пользователя {0} с параметрами skip={1}, limit={2}", userId, skip, limit);
                 var request = new GetUserChatsRequest
                 {
                     UserId = userId,
-                    PageSize = 100,
-                    PageNumber = 1
+                    Skip = skip ?? 0,
+                    Limit = limit ?? 100
                 };
                 var response = await _client.GetUserChatsAsync(request);
 
@@ -95,12 +128,17 @@ namespace ApiGateway.GraphQL
             }
         }
 
-        public async Task<IEnumerable<ChatMessage>> GetChatMessages(string chatId)
+        public async Task<IEnumerable<ChatMessage>> GetChatMessages(string chatId, int? skip = null, int? limit = null)
         {
             try
             {
-                _logger.LogInformation("Получение сообщений для чата {ChatId}", chatId);
-                var request = new GetChatMessagesRequest { ChatId = chatId };
+                _logger.LogInformation("Получение сообщений для чата {ChatId} с параметрами skip={1}, limit={2}", chatId, skip, limit);
+                var request = new GetChatMessagesRequest
+                {
+                    ChatId = chatId,
+                    Skip = skip ?? 0,
+                    Limit = limit ?? 100
+                };
                 var response = await _client.GetChatMessagesAsync(request);
 
                 _logger.LogInformation("Получено {Count} сообщений для чата {ChatId}", response.Messages.Count, chatId);
@@ -110,7 +148,8 @@ namespace ApiGateway.GraphQL
                     Content = msg.Content,
                     CreatedAt = DateTime.Parse(msg.CreatedAt),
                     SenderType = (SenderType)msg.SenderType,
-                    SenderId = msg.SenderId
+                    SenderId = msg.SenderId,
+                    ChatId = chatId
                 });
             }
             catch (Exception ex)
@@ -241,38 +280,6 @@ namespace ApiGateway.GraphQL
                     _logger.LogInformation("Стриминг завершен для чата {ChatId}", input.ChatId);
                     break;
                 }
-            }
-        }
-
-        public async Task<Chat> GenerateChatTitle(string chatId)
-        {
-            try
-            {
-                _logger.LogInformation("Генерация заголовка для чата {ChatId}", chatId);
-
-                // Вызываем gRPC метод для генерации заголовка
-                var request = new GenerateChatTitleRequest
-                {
-                    ChatId = chatId
-                };
-
-                var response = await _client.GenerateChatTitleAsync(request);
-
-                _logger.LogInformation("Заголовок для чата {ChatId} успешно сгенерирован: {Title}", chatId, response.Title);
-
-                // Возвращаем обновленную информацию о чате
-                return new Chat
-                {
-                    Id = response.ChatId,
-                    Title = response.Title,
-                    LastUpdate = DateTime.Parse(response.LastUpdate),
-                    Participants = new List<Participant>()
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Ошибка при генерации заголовка для чата {ChatId}: {Error}", chatId, ex.Message);
-                throw;
             }
         }
     }

@@ -51,11 +51,5 @@ namespace ApiGateway.GraphQL
                 yield return response;
             }
         }
-
-        [HotChocolate.Authorization.Authorize]
-        public async Task<Chat> GenerateChatTitle([Service] ChatResolver resolver, string chatId)
-        {
-            return await resolver.GenerateChatTitle(chatId);
-        }
     }
 }

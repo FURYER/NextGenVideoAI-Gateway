@@ -26,8 +26,8 @@ service ChatService {
   // Получение сообщения по содержимому
   rpc GetMessage (GetMessageRequest) returns (GetMessageResponse);
   
-  // Генерация заголовка чата на основе его содержимого
-  rpc GenerateChatTitle (GenerateChatTitleRequest) returns (GenerateChatTitleResponse);
+  // Получение чата по ID
+  rpc GetChatById (GetChatByIdRequest) returns (ChatInfo);
 }
 
 message SendMessageRequest {
@@ -57,8 +57,8 @@ message CreateChatResponse {
 
 message GetChatMessagesRequest {
   string chat_id = 1;
-  int32 page_size = 2;
-  int32 page_number = 3;
+  int32 skip = 2;
+  int32 limit = 3;
 }
 
 message ChatMessage {
@@ -76,8 +76,8 @@ message GetChatMessagesResponse {
 
 message GetUserChatsRequest {
   string user_id = 1;
-  int32 page_size = 2;
-  int32 page_number = 3;
+  int32 skip = 2;
+  int32 limit = 3;
 }
 
 message ChatInfo {
@@ -93,14 +93,18 @@ message GetUserChatsResponse {
   int32 total_count = 2;
 }
 
+message GetChatByIdRequest {
+  string chat_id = 1;
+}
+
 enum SenderType {
   USER = 0;
   AI = 1;
 }
 
 message GetChatsRequest {
-  int32 page_size = 1;
-  int32 page_number = 2;
+  int32 skip = 1;
+  int32 limit = 2;
 }
 
 message GetChatsResponse {
@@ -132,14 +136,3 @@ message GetMessageResponse {
   SenderType sender_type = 4;
   string sender_id = 5;
 }
-
-message GenerateChatTitleRequest {
-  string chat_id = 1;
-}
-
-message GenerateChatTitleResponse {
-  string chat_id = 1;
-  string title = 2;
-  string last_message = 3;
-  string last_update = 4;
-} 

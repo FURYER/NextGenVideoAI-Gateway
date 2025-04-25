@@ -10,14 +10,24 @@ namespace ApiGateway.GraphQL
         {
             descriptor.Field("getChats")
                 .Argument("userId", a => a.Type<NonNullType<StringType>>())
+                .Argument("skip", a => a.Type<IntType>())
+                .Argument("limit", a => a.Type<IntType>())
                 .Type<ListType<NonNullType<ChatType>>>()
-                .ResolveWith<ChatResolver>(r => r.GetChats(default!))
+                .ResolveWith<ChatResolver>(r => r.GetChats(default!, default, default))
+                .Authorize();
+
+            descriptor.Field("getChatById")
+                .Argument("chatId", a => a.Type<NonNullType<StringType>>())
+                .Type<ChatType>()
+                .ResolveWith<ChatResolver>(r => r.GetChatById(default!))
                 .Authorize();
 
             descriptor.Field("getChatMessages")
                 .Argument("chatId", a => a.Type<NonNullType<StringType>>())
+                .Argument("skip", a => a.Type<IntType>())
+                .Argument("limit", a => a.Type<IntType>())
                 .Type<ListType<NonNullType<ChatMessageType>>>()
-                .ResolveWith<ChatResolver>(r => r.GetChatMessages(default!))
+                .ResolveWith<ChatResolver>(r => r.GetChatMessages(default!, default, default))
                 .Authorize();
 
             descriptor.Field("getMessage")
