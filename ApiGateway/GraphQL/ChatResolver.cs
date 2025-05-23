@@ -56,7 +56,7 @@ namespace ApiGateway.GraphQL
                     Id = response.ChatId,
                     Title = response.Name,
                     LastUpdate = DateTime.Parse(response.LastUpdate),
-                    Participants = new List<Participant>()
+                    IsBusy = response.IsBusy
                 };
             }
             catch (Exception ex)
@@ -89,7 +89,7 @@ namespace ApiGateway.GraphQL
                     Id = response.Id,
                     Title = response.Name,
                     LastUpdate = DateTime.Parse(response.LastUpdate),
-                    Participants = new List<Participant>()
+                    IsBusy = response.IsBusy
                 };
             }
             catch (Exception ex)
@@ -118,7 +118,7 @@ namespace ApiGateway.GraphQL
                     Id = chat.Id,
                     Title = chat.Name,
                     LastUpdate = DateTime.Parse(chat.LastUpdate),
-                    Participants = new List<Participant>()
+                    IsBusy = chat.IsBusy
                 });
             }
             catch (Exception ex)
@@ -149,7 +149,19 @@ namespace ApiGateway.GraphQL
                     CreatedAt = DateTime.Parse(msg.CreatedAt),
                     SenderType = (SenderType)msg.SenderType,
                     SenderId = msg.SenderId,
-                    ChatId = chatId
+                    ChatId = chatId,
+                    RequiresEditing = msg.RequiresEditing,
+                    IsEditingStage = msg.IsEditingStage,
+                    CommandId = msg.CommandId,
+                    IsCompleted = msg.IsCompleted,
+                    Attachments = msg.Attachments.Select(att => new Attachment
+                    {
+                        FileId = att.FileId,
+                        FileName = att.FileName,
+                        ContentType = att.ContentType,
+                        FileSize = att.FileSize,
+                        FileUrl = att.FileUrl
+                    }).ToList()
                 });
             }
             catch (Exception ex)
@@ -159,18 +171,36 @@ namespace ApiGateway.GraphQL
             }
         }
 
-        public async Task<ChatMessage> SendMessage(string chatId, string content, string userId)
+        public async Task<ChatMessage> SendMessage(string chatId, string content, string userId,
+            bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null)
         {
             try
             {
-                _logger.LogInformation("Отправка сообщения в чат {ChatId} от пользователя {UserId}", chatId, userId);
+                _logger.LogInformation("Отправка сообщения в чат {ChatId} от пользователя {UserId} требует монтажа: {RequiresEditing}", chatId, userId, requiresEditing);
                 var request = new SendMessageRequest
                 {
                     ChatId = chatId,
                     Content = content,
                     SenderId = userId,
-                    SenderType = (NextGenVideoAI.ChatService.Api.SenderType)SenderType.User
+                    SenderType = (NextGenVideoAI.ChatService.Api.SenderType)SenderType.User,
+                    RequiresEditing = requiresEditing,
+                    IsEditingStage = isEditingStage
                 };
+
+                if (attachments != null && attachments.Any())
+                {
+                    foreach (var attachment in attachments)
+                    {
+                        request.Attachments.Add(new NextGenVideoAI.ChatService.Api.AttachmentInfo
+                        {
+                            FileId = attachment.FileId,
+                            FileName = attachment.FileName,
+                            ContentType = attachment.ContentType,
+                            FileSize = attachment.FileSize,
+                            FileUrl = attachment.FileUrl ?? string.Empty
+                        });
+                    }
+                }
 
                 var response = await _client.SendMessageAsync(request);
 
@@ -181,7 +211,18 @@ namespace ApiGateway.GraphQL
                     Content = response.Content,
                     CreatedAt = DateTime.Parse(response.CreatedAt),
                     SenderType = SenderType.User,
-                    SenderId = userId
+                    SenderId = userId,
+                    ChatId = chatId,
+                    RequiresEditing = response.RequiresEditing,
+                    IsEditingStage = response.IsEditingStage,
+                    Attachments = response.Attachments.Select(att => new Attachment
+                    {
+                        FileId = att.FileId,
+                        FileName = att.FileName,
+                        ContentType = att.ContentType,
+                        FileSize = att.FileSize,
+                        FileUrl = att.FileUrl
+                    }).ToList()
                 };
             }
             catch (Exception ex)
@@ -211,12 +252,86 @@ namespace ApiGateway.GraphQL
                     CreatedAt = DateTime.Parse(response.CreatedAt),
                     SenderType = (SenderType)response.SenderType,
                     SenderId = response.SenderId,
-                    ChatId = chatId
+                    ChatId = chatId,
+                    RequiresEditing = response.RequiresEditing,
+                    IsEditingStage = response.IsEditingStage,
+                    CommandId = response.CommandId,
+                    IsCompleted = response.IsCompleted,
+                    Attachments = response.Attachments.Select(att => new Attachment
+                    {
+                        FileId = att.FileId,
+                        FileName = att.FileName,
+                        ContentType = att.ContentType,
+                        FileSize = att.FileSize,
+                        FileUrl = att.FileUrl
+                    }).ToList()
                 };
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Ошибка при получении сообщения для чата {ChatId}: {Error}", chatId, ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<Attachment> AttachFileToMessage(string messageId, Attachment attachment)
+        {
+            try
+            {
+                _logger.LogInformation("Прикрепление файла {FileName} к сообщению {MessageId}", attachment.FileName, messageId);
+                var attachmentInfo = new NextGenVideoAI.ChatService.Api.AttachmentInfo
+                {
+                    FileId = attachment.FileId,
+                    FileName = attachment.FileName,
+                    ContentType = attachment.ContentType,
+                    FileSize = attachment.FileSize,
+                    FileUrl = attachment.FileUrl ?? string.Empty
+                };
+
+                var request = new AttachFileRequest
+                {
+                    MessageId = messageId,
+                    Attachment = attachmentInfo
+                };
+
+                var response = await _client.AttachFileToMessageAsync(request);
+
+                _logger.LogInformation("Файл {FileName} успешно прикреплен к сообщению {MessageId}", attachment.FileName, messageId);
+                return new Attachment
+                {
+                    FileId = response.Attachment.FileId,
+                    FileName = response.Attachment.FileName,
+                    ContentType = response.Attachment.ContentType,
+                    FileSize = response.Attachment.FileSize,
+                    FileUrl = response.Attachment.FileUrl
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при прикреплении файла к сообщению {MessageId}: {Error}", messageId, ex.Message);
+                throw;
+            }
+        }
+
+        public async Task<bool> RemoveAttachedFile(string messageId, string attachmentId)
+        {
+            try
+            {
+                _logger.LogInformation("Удаление прикрепленного файла {AttachmentId} из сообщения {MessageId}", attachmentId, messageId);
+                var request = new RemoveAttachedFileRequest
+                {
+                    MessageId = messageId,
+                    AttachmentId = attachmentId
+                };
+
+                var response = await _client.RemoveAttachedFileAsync(request);
+
+                _logger.LogInformation("Файл {AttachmentId} успешно удален из сообщения {MessageId}", attachmentId, messageId);
+                return response.Success;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при удалении файла из сообщения {MessageId}: {Error}", messageId, ex.Message);
                 throw;
             }
         }
@@ -256,6 +371,22 @@ namespace ApiGateway.GraphQL
                 Content = input.Content,
                 UserId = input.UserId
             };
+
+            // Добавляем вложения, если они есть
+            if (input.Attachments != null && input.Attachments.Any())
+            {
+                foreach (var attachment in input.Attachments)
+                {
+                    request.Attachments.Add(new NextGenVideoAI.ChatService.Api.AttachmentInfo
+                    {
+                        FileId = attachment.FileId,
+                        FileName = attachment.FileName,
+                        ContentType = attachment.ContentType,
+                        FileSize = attachment.FileSize,
+                        FileUrl = attachment.FileUrl ?? string.Empty
+                    });
+                }
+            }
 
             using var call = _client.StreamChat(request);
             var responseStream = call.ResponseStream;

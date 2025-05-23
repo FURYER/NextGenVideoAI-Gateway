@@ -10,9 +10,16 @@ message TokenInfo {
   string ip_address = 4;
   string created_at = 5;
   string expires_at = 6;
-  bool is_remember_me = 7;
   string username = 8;
   string user_id = 9;
+}
+
+// Добавляем новый тип для профиля пользователя
+message UserProfile {
+  string user_id = 1;
+  string username = 2;
+  string email = 3;
+  string created_at = 4;
 }
 
 service UserService {
@@ -25,6 +32,9 @@ service UserService {
   rpc ValidateToken (ValidateTokenRequest) returns (ValidateTokenResponse);
   rpc RevokeToken (RevokeTokenRequest) returns (RevokeTokenResponse);
   rpc RevokeAllUserTokens (RevokeAllUserTokensRequest) returns (RevokeAllUserTokensResponse);
+  
+  // Метод для получения профиля пользователя
+  rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse);
 }
 
 // Обновляем существующие сообщения
@@ -33,7 +43,6 @@ message LoginRequest {
   string password = 2;
   string device_info = 3;    // Добавляем
   string ip_address = 4;     // Добавляем
-  bool remember_me = 5;      // Добавляем
 }
 
 message LoginResponse {
@@ -71,6 +80,15 @@ message RevokeAllUserTokensRequest {
 message RevokeAllUserTokensResponse {
   bool success = 1;
   int32 revoked_count = 2;
+}
+
+// Сообщения для получения профиля пользователя
+message GetUserProfileRequest {
+  string user_id = 1;
+}
+
+message GetUserProfileResponse {
+  UserProfile profile = 1;
 }
 
 // Обновляем существующие сообщения

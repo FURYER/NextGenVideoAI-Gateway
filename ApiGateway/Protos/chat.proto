@@ -28,6 +28,12 @@ service ChatService {
   
   // Получение чата по ID
   rpc GetChatById (GetChatByIdRequest) returns (ChatInfo);
+  
+  // Прикрепление файла к сообщению
+  rpc AttachFileToMessage (AttachFileRequest) returns (AttachFileResponse);
+  
+  // Удаление прикрепленного файла из сообщения
+  rpc RemoveAttachedFile (RemoveAttachedFileRequest) returns (RemoveAttachedFileResponse);
 }
 
 message SendMessageRequest {
@@ -35,12 +41,18 @@ message SendMessageRequest {
   string content = 2;
   string sender_id = 3;
   SenderType sender_type = 4;
+  bool requires_editing = 5;
+  bool is_editing_stage = 6;
+  repeated AttachmentInfo attachments = 7;
 }
 
 message SendMessageResponse {
   string message_id = 1;
   string content = 2;
   string created_at = 3;
+  bool requires_editing = 4;
+  bool is_editing_stage = 5;
+  repeated AttachmentInfo attachments = 6;
 }
 
 message CreateChatRequest {
@@ -53,6 +65,7 @@ message CreateChatResponse {
   string chat_id = 1;
   string name = 2;
   string last_update = 3;
+  bool is_busy = 4;
 }
 
 message GetChatMessagesRequest {
@@ -67,6 +80,11 @@ message ChatMessage {
   string created_at = 3;
   SenderType sender_type = 4;
   string sender_id = 5;
+  bool requires_editing = 6;
+  bool is_editing_stage = 7;
+  repeated AttachmentInfo attachments = 8;
+  string command_id = 9;
+  bool is_completed = 10;
 }
 
 message GetChatMessagesResponse {
@@ -86,6 +104,7 @@ message ChatInfo {
   string chat_context = 3;
   string last_context_update_time = 4;
   string last_update = 5;
+  bool is_busy = 6;
 }
 
 message GetUserChatsResponse {
@@ -100,6 +119,7 @@ message GetChatByIdRequest {
 enum SenderType {
   USER = 0;
   AI = 1;
+  AI2 = 2;
 }
 
 message GetChatsRequest {
@@ -116,6 +136,7 @@ message StreamChatRequest {
   string chat_id = 1;
   string content = 2;
   string user_id = 3;
+  repeated AttachmentInfo attachments = 4;
 }
 
 message StreamChatResponse {
@@ -135,4 +156,42 @@ message GetMessageResponse {
   string created_at = 3;
   SenderType sender_type = 4;
   string sender_id = 5;
+  bool requires_editing = 6;
+  bool is_editing_stage = 7;
+  repeated AttachmentInfo attachments = 8;
+  string command_id = 9;
+  bool is_completed = 10;
+}
+
+// Информация о прикрепленном файле
+message AttachmentInfo {
+  string file_id = 1;
+  string file_name = 2;
+  string content_type = 3;
+  int64 file_size = 4;
+  string file_url = 5;
+}
+
+// Запрос на прикрепление файла к сообщению
+message AttachFileRequest {
+  string message_id = 1;
+  AttachmentInfo attachment = 2;
+}
+
+// Ответ на прикрепление файла
+message AttachFileResponse {
+  string attachment_id = 1;
+  string message_id = 2;
+  AttachmentInfo attachment = 3;
+}
+
+// Запрос на удаление прикрепленного файла
+message RemoveAttachedFileRequest {
+  string attachment_id = 1;
+  string message_id = 2;
+}
+
+// Ответ на удаление прикрепленного файла
+message RemoveAttachedFileResponse {
+  bool success = 1;
 }

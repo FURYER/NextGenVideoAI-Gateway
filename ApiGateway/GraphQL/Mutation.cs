@@ -32,9 +32,10 @@ namespace ApiGateway.GraphQL
         }
 
         [HotChocolate.Authorization.Authorize]
-        public async Task<ChatMessage> SendMessage([Service] ChatResolver resolver, string chatId, string content, string userId)
+        public async Task<ChatMessage> SendMessage([Service] ChatResolver resolver, string chatId, string content, string userId,
+            bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null)
         {
-            return await resolver.SendMessage(chatId, content, userId);
+            return await resolver.SendMessage(chatId, content, userId, requiresEditing, isEditingStage, attachments);
         }
 
         [HotChocolate.Authorization.Authorize]
@@ -50,6 +51,75 @@ namespace ApiGateway.GraphQL
             {
                 yield return response;
             }
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<Attachment> AttachFileToMessage([Service] ChatResolver resolver, string messageId, Attachment attachment)
+        {
+            return await resolver.AttachFileToMessage(messageId, attachment);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<bool> RemoveAttachedFile([Service] ChatResolver resolver, string messageId, string attachmentId)
+        {
+            return await resolver.RemoveAttachedFile(messageId, attachmentId);
+        }
+
+        // Методы для работы с файловым хранилищем
+        [HotChocolate.Authorization.Authorize]
+        public async Task<UploadFileResult> UploadFile([Service] StorageResolver resolver, UploadFileInput input)
+        {
+            var response = await resolver.UploadFile(
+                input.UserId,
+                input.FileName,
+                input.ContentType,
+                input.FileData,
+                input.ChatId);
+
+            return new UploadFileResult
+            {
+                Success = response.Success,
+                ErrorMessage = response.ErrorMessage,
+                FileId = response.FileId,
+                FileSize = response.FileSize
+            };
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<DeleteFileResult> DeleteFile([Service] StorageResolver resolver, string fileId)
+        {
+            var response = await resolver.DeleteFile(fileId);
+
+            return new DeleteFileResult
+            {
+                Success = response.Success,
+                ErrorMessage = response.ErrorMessage
+            };
+        }
+
+        // Методы для фрагментированной загрузки файлов
+        [HotChocolate.Authorization.Authorize]
+        public async Task<InitChunkedUploadResult> InitChunkedUpload([Service] StorageResolver resolver, InitChunkedUploadInput input)
+        {
+            return await resolver.InitChunkedUpload(input);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<ChunkUploadResult> UploadFileChunk([Service] StorageResolver resolver, ChunkUploadInput input)
+        {
+            return await resolver.UploadFileChunk(input);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<CompleteChunkedUploadResult> CompleteChunkedUpload([Service] StorageResolver resolver, string uploadId, string userId)
+        {
+            return await resolver.CompleteChunkedUpload(uploadId, userId);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<CancelChunkedUploadResult> CancelChunkedUpload([Service] StorageResolver resolver, string uploadId, string userId)
+        {
+            return await resolver.CancelChunkedUpload(uploadId, userId);
         }
     }
 }

@@ -13,6 +13,11 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.SenderType).Type<NonNullType<EnumType<SenderType>>>().Description("Тип отправителя");
             descriptor.Field(f => f.SenderId).Type<NonNullType<StringType>>().Description("ID отправителя");
             descriptor.Field(f => f.ChatId).Type<NonNullType<StringType>>().Description("ID чата");
+            descriptor.Field(f => f.RequiresEditing).Type<NonNullType<BooleanType>>().Description("Требует ли сообщение монтажа");
+            descriptor.Field(f => f.IsEditingStage).Type<NonNullType<BooleanType>>().Description("Находится ли сообщение на этапе монтажа");
+            descriptor.Field(f => f.CommandId).Type<StringType>().Description("ID команды");
+            descriptor.Field(f => f.IsCompleted).Type<NonNullType<BooleanType>>().Description("Завершено ли выполнение");
+            descriptor.Field(f => f.Attachments).Type<ListType<NonNullType<AttachmentType>>>().Description("Прикрепленные файлы");
         }
     }
 
@@ -24,12 +29,18 @@ namespace ApiGateway.GraphQL
         public SenderType SenderType { get; set; }
         public string SenderId { get; set; } = string.Empty;
         public string ChatId { get; set; } = string.Empty;
+        public bool RequiresEditing { get; set; }
+        public bool IsEditingStage { get; set; }
+        public string? CommandId { get; set; }
+        public bool IsCompleted { get; set; }
+        public List<Attachment> Attachments { get; set; } = new();
     }
 
     public enum SenderType
     {
         User,
-        AI
+        AI,
+        AI2
     }
 
     public class SenderTypeType : EnumType<SenderType>
@@ -39,6 +50,7 @@ namespace ApiGateway.GraphQL
             descriptor.Description("Тип отправителя сообщения");
             descriptor.Value(SenderType.User).Description("Пользователь");
             descriptor.Value(SenderType.AI).Description("Искусственный интеллект");
+            descriptor.Value(SenderType.AI2).Description("Второй ИИ");
         }
     }
 
@@ -50,7 +62,7 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.Id).Type<NonNullType<StringType>>().Description("ID чата");
             descriptor.Field(f => f.Title).Type<NonNullType<StringType>>().Description("Название чата");
             descriptor.Field(f => f.LastUpdate).Type<NonNullType<DateTimeType>>().Description("Время последнего обновления");
-            descriptor.Field(f => f.Participants).Type<NonNullType<ListType<NonNullType<ParticipantType>>>>().Description("Участники чата");
+            descriptor.Field(f => f.IsBusy).Type<NonNullType<BooleanType>>().Description("Занят ли чат обработкой");
         }
     }
 
@@ -59,23 +71,29 @@ namespace ApiGateway.GraphQL
         public string Id { get; set; } = string.Empty;
         public string Title { get; set; } = string.Empty;
         public DateTime LastUpdate { get; set; }
-        public List<Participant> Participants { get; set; } = new();
+        public bool IsBusy { get; set; }
     }
 
-    public class ParticipantType : ObjectType<Participant>
+    public class AttachmentType : ObjectType<Attachment>
     {
-        protected override void Configure(IObjectTypeDescriptor<Participant> descriptor)
+        protected override void Configure(IObjectTypeDescriptor<Attachment> descriptor)
         {
-            descriptor.Description("Участник чата");
-            descriptor.Field(f => f.Id).Type<NonNullType<StringType>>().Description("ID участника");
-            descriptor.Field(f => f.Name).Type<NonNullType<StringType>>().Description("Имя участника");
+            descriptor.Description("Прикрепленный файл");
+            descriptor.Field(f => f.FileId).Type<NonNullType<StringType>>().Description("ID файла");
+            descriptor.Field(f => f.FileName).Type<NonNullType<StringType>>().Description("Имя файла");
+            descriptor.Field(f => f.ContentType).Type<NonNullType<StringType>>().Description("Тип содержимого файла");
+            descriptor.Field(f => f.FileSize).Type<NonNullType<LongType>>().Description("Размер файла");
+            descriptor.Field(f => f.FileUrl).Type<StringType>().Description("URL файла");
         }
     }
 
-    public class Participant
+    public class Attachment
     {
-        public string Id { get; set; } = string.Empty;
-        public string Name { get; set; } = string.Empty;
+        public string FileId { get; set; } = string.Empty;
+        public string FileName { get; set; } = string.Empty;
+        public string ContentType { get; set; } = string.Empty;
+        public long FileSize { get; set; }
+        public string? FileUrl { get; set; }
     }
 
     public class ChatStreamResponseType : ObjectType<ChatStreamResponse>
@@ -101,6 +119,7 @@ namespace ApiGateway.GraphQL
         public string ChatId { get; set; } = string.Empty;
         public string Content { get; set; } = string.Empty;
         public string UserId { get; set; } = string.Empty;
+        public List<Attachment>? Attachments { get; set; }
     }
 
     public class StreamChatInputType : InputObjectType<StreamChatInput>
@@ -111,6 +130,20 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.ChatId).Type<NonNullType<StringType>>().Description("ID чата");
             descriptor.Field(f => f.Content).Type<NonNullType<StringType>>().Description("Содержимое сообщения");
             descriptor.Field(f => f.UserId).Type<NonNullType<StringType>>().Description("ID пользователя");
+            descriptor.Field(f => f.Attachments).Type<ListType<AttachmentInputType>>().Description("Прикрепленные файлы");
+        }
+    }
+
+    public class AttachmentInputType : InputObjectType<Attachment>
+    {
+        protected override void Configure(IInputObjectTypeDescriptor<Attachment> descriptor)
+        {
+            descriptor.Description("Входные данные для прикрепленного файла");
+            descriptor.Field(f => f.FileId).Type<NonNullType<StringType>>().Description("ID файла");
+            descriptor.Field(f => f.FileName).Type<NonNullType<StringType>>().Description("Имя файла");
+            descriptor.Field(f => f.ContentType).Type<NonNullType<StringType>>().Description("Тип содержимого файла");
+            descriptor.Field(f => f.FileSize).Type<NonNullType<LongType>>().Description("Размер файла");
+            descriptor.Field(f => f.FileUrl).Type<StringType>().Description("URL файла");
         }
     }
 }

@@ -141,7 +141,6 @@ namespace ApiGateway.GraphQL
                     Password = input.Password,
                     DeviceInfo = GetDeviceInfo(),
                     IpAddress = GetIpAddress(),
-                    RememberMe = input.RememberMe
                 });
 
                 // Проверяем 2FA код, если он предоставлен
@@ -258,6 +257,50 @@ namespace ApiGateway.GraphQL
                 }
             }
             return false;
+        }
+
+        public async Task<UserProfileResponse> GetUserProfile([Argument] string userId)
+        {
+            try
+            {
+                _logger.LogInformation("Получение профиля пользователя с ID: {UserId}", userId);
+
+                var response = await _client.GetUserProfileAsync(new GetUserProfileRequest
+                {
+                    UserId = userId
+                });
+
+                return new UserProfileResponse
+                {
+                    Success = true,
+                    Message = "Профиль пользователя успешно получен",
+                    Profile = new UserProfileDto
+                    {
+                        UserId = response.Profile.UserId,
+                        Username = response.Profile.Username,
+                        Email = response.Profile.Email,
+                        CreatedAt = response.Profile.CreatedAt,
+                    }
+                };
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "Ошибка при получении профиля пользователя: {Detail}", ex.Status.Detail);
+                return new UserProfileResponse
+                {
+                    Success = false,
+                    Message = ex.Status.Detail ?? "Ошибка при получении профиля пользователя"
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Непредвиденная ошибка при получении профиля пользователя");
+                return new UserProfileResponse
+                {
+                    Success = false,
+                    Message = "Внутренняя ошибка сервера при получении профиля пользователя"
+                };
+            }
         }
     }
 }

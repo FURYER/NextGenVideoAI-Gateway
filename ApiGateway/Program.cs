@@ -31,6 +31,8 @@ using Serilog;
 using Serilog.Sinks.Elasticsearch;
 using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
 using ApiGateway.GraphQL.Subscriptions;
+using StackExchange.Redis;
+using Microsoft.AspNetCore.Mvc;
 
 public class Program
 {
@@ -74,6 +76,14 @@ public class Program
                     // Регистрируем UserResolver в DI
                     services.AddScoped<UserResolver>();
                     services.AddScoped<ChatResolver>();
+                    // Регистрируем StorageResolver в DI
+                    services.AddScoped<StorageResolver>();
+
+                    // Регистрируем CurrentUserService в DI
+                    services.AddScoped<ICurrentUserService, CurrentUserService>();
+
+                    // Регистрируем StorageService в DI
+                    services.AddScoped<IStorageService, StorageService>();
 
                     // Добавляем HttpContextAccessor
                     services.AddHttpContextAccessor();
@@ -171,13 +181,35 @@ public class Program
                             builder.WithOrigins(Environment.GetEnvironmentVariable("ALLOWED_ORIGINS")?.Split(',') ?? Array.Empty<string>())
                                    .WithMethods("GET", "POST", "OPTIONS")
                                    .WithHeaders("Authorization", "Content-Type")
+                                   .WithExposedHeaders("ETag")
                                    .AllowCredentials()
                                    .SetIsOriginAllowedToAllowWildcardSubdomains();
                         });
                     });
 
+                    // Настраиваем размеры запросов
+                    services.Configure<Microsoft.AspNetCore.Server.Kestrel.Core.KestrelServerOptions>(options =>
+                    {
+                        options.Limits.MaxRequestBodySize = null; // Отключаем ограничение на размер запроса
+                    });
+
+                    services.Configure<Microsoft.AspNetCore.Http.Features.FormOptions>(options =>
+                    {
+                        options.MultipartBodyLengthLimit = long.MaxValue; // Устанавливаем максимальный размер для multipart формы
+                    });
+
                     // Добавляем сервисы
                     services.AddSingleton<ITwoFactorAuthService, TwoFactorAuthService>();
+
+                    // Настраиваем Redis
+                    services.AddSingleton<IConnectionMultiplexer>(sp =>
+                    {
+                        var redisConnectionString = Environment.GetEnvironmentVariable("REDIS_CONNECTION_STRING")!;
+                        return ConnectionMultiplexer.Connect(redisConnectionString);
+                    });
+
+                    // Используем Redis для хранения состояния загрузки
+                    services.AddSingleton<IUploadStateService, RedisUploadStateService>();
 
                     // Добавляем защиту от CSRF
                     services.AddAntiforgery(options =>
@@ -213,6 +245,24 @@ public class Program
                         .AddType<ChatStreamResponseType>()
                         .AddType<StreamChatInputType>()
                         .AddType<NotificationType>()
+                        // Добавляем типы хранилища файлов
+                        .AddType<FileInfoType>()
+                        .AddType<UploadFileResultType>()
+                        .AddType<DeleteFileResultType>()
+                        .AddType<UploadFileInputType>()
+                        .AddType<DownloadFileResultType>()
+                        .AddType<FileMetadataType>()
+                        // Добавляем типы для фрагментированной загрузки файлов
+                        .AddType<InitChunkedUploadInputType>()
+                        .AddType<InitChunkedUploadResultType>()
+                        .AddType<ChunkUploadInputType>()
+                        .AddType<ChunkUploadResultType>()
+                        .AddType<PresignedUrlType>()
+                        .AddType<CompleteChunkedUploadResultType>()
+                        .AddType<CancelChunkedUploadResultType>()
+                        .AddType<UploadStatusType>()
+                        .AddType<FileUploadProgressType>()
+                        .AddType<FileChunkResponseType>()
                         .AddAuthorizationHandler<DefaultAuthorizationHandler>()
                         .AddErrorFilter<ErrorFilter>()
                         .AddDiagnosticEventListener(sp =>
@@ -415,6 +465,80 @@ public class Program
                         {
                             await context.Response.WriteAsync("GraphQL API Gateway is running. Access GraphiQL at /graphql");
                         });
+
+                        // Добавляем REST endpoint для скачивания файлов
+                        endpoints.MapGet("/files/{fileId}/download", async (
+                            string fileId,
+                            HttpContext context,
+                            [FromServices] IStorageService storageService,
+                            [FromServices] ICurrentUserService currentUserService,
+                            [FromServices] ILogger<Program> logger) =>
+                        {
+                            try
+                            {
+                                var userId = currentUserService.GetCurrentUserId();
+
+                                // Получаем метаданные файла
+                                var metadata = await storageService.GetFileMetadata(fileId, userId);
+                                if (metadata == null)
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status404NotFound;
+                                    await context.Response.WriteAsJsonAsync(new { error = "NotFound", message = "Файл не найден" });
+                                    return;
+                                }
+
+                                // Проверяем размер файла
+                                if (metadata.Size <= 0)
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                                    await context.Response.WriteAsJsonAsync(new { error = "InvalidFile", message = "Некорректный размер файла" });
+                                    return;
+                                }
+
+                                // Устанавливаем заголовки ответа
+                                context.Response.Headers["Content-Type"] = metadata.ContentType;
+                                context.Response.Headers["Content-Disposition"] = $"attachment; filename=\"{metadata.FileName}\"";
+                                context.Response.Headers["Transfer-Encoding"] = "chunked";
+
+                                // Получаем поток и передаем его напрямую
+                                var stream = await storageService.DownloadFile(fileId, userId);
+                                if (stream == null)
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                                    await context.Response.WriteAsJsonAsync(new { error = "InternalServerError", message = "Не удалось получить файл" });
+                                    return;
+                                }
+
+                                // Отправляем файл потоком
+                                await stream.CopyToAsync(context.Response.Body);
+                            }
+                            catch (UnauthorizedAccessException)
+                            {
+                                if (!context.Response.HasStarted)
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "У вас нет доступа к этому файлу" });
+                                }
+                                else
+                                {
+                                    // Если заголовки уже отправлены, просто логируем ошибку
+                                    logger.LogWarning("Попытка несанкционированного доступа к файлу {FileId}", fileId);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                if (!context.Response.HasStarted)
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+                                    await context.Response.WriteAsJsonAsync(new { error = "InternalServerError", message = ex.Message });
+                                }
+                                else
+                                {
+                                    // Если заголовки уже отправлены, просто логируем ошибку
+                                    logger.LogError(ex, "Ошибка при отправке файла {FileId}", fileId);
+                                }
+                            }
+                        }).RequireAuthorization();
                     });
 
                     // Стартуем RabbitMQ сервис для прослушивания сообщений

@@ -37,7 +37,7 @@ namespace ApiGateway.Services
                     Port = int.Parse(Environment.GetEnvironmentVariable("RABBITMQ_PORT")!),
                     UserName = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME"),
                     Password = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD"),
-                    VirtualHost = Environment.GetEnvironmentVariable("RABBITMQ_VIRTUALHOST")
+                    VirtualHost = "/"
                 };
 
                 _connection = factory.CreateConnection();

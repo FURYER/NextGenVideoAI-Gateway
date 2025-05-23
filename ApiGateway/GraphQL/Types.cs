@@ -50,7 +50,6 @@ namespace ApiGateway.GraphQL
             descriptor.Description("Входные данные для входа в систему");
             descriptor.Field(f => f.Email).Type<NonNullType<StringType>>().Description("Email пользователя");
             descriptor.Field(f => f.Password).Type<NonNullType<StringType>>().Description("Пароль пользователя");
-            descriptor.Field(f => f.RememberMe).Type<BooleanType>().Description("Запомнить пользователя");
             descriptor.Field(f => f.TwoFactorCode).Type<StringType>().Description("Код двухфакторной аутентификации");
             descriptor.Field(f => f.TwoFactorSecret).Type<StringType>().Description("Секретный ключ для 2FA");
         }
@@ -62,7 +61,6 @@ namespace ApiGateway.GraphQL
         public string? Password { get; set; }
         public string? TwoFactorCode { get; set; }
         public string? TwoFactorSecret { get; set; }
-        public bool RememberMe { get; set; }
     }
 
     // Authentication types
@@ -90,5 +88,44 @@ namespace ApiGateway.GraphQL
         public string? UserId { get; set; }
         public string? TwoFactorSecret { get; set; }
         public string? Username { get; set; }
+    }
+
+    // User Profile types
+    public class UserProfileDto
+    {
+        public string? UserId { get; set; }
+        public string? Username { get; set; }
+        public string? Email { get; set; }
+        public string? CreatedAt { get; set; }
+    }
+
+    public class UserProfileType : ObjectType<UserProfileDto>
+    {
+        protected override void Configure(IObjectTypeDescriptor<UserProfileDto> descriptor)
+        {
+            descriptor.Description("Профиль пользователя");
+            descriptor.Field(f => f.UserId).Type<StringType>().Description("ID пользователя");
+            descriptor.Field(f => f.Username).Type<StringType>().Description("Имя пользователя");
+            descriptor.Field(f => f.Email).Type<StringType>().Description("Email пользователя");
+            descriptor.Field(f => f.CreatedAt).Type<StringType>().Description("Дата создания аккаунта");
+        }
+    }
+
+    public class UserProfileResponse
+    {
+        public bool Success { get; set; }
+        public string? Message { get; set; }
+        public UserProfileDto? Profile { get; set; }
+    }
+
+    public class UserProfileResponseType : ObjectType<UserProfileResponse>
+    {
+        protected override void Configure(IObjectTypeDescriptor<UserProfileResponse> descriptor)
+        {
+            descriptor.Description("Ответ на запрос профиля пользователя");
+            descriptor.Field(f => f.Success).Type<NonNullType<BooleanType>>().Description("Успешность операции");
+            descriptor.Field(f => f.Message).Type<StringType>().Description("Сообщение об операции");
+            descriptor.Field(f => f.Profile).Type<UserProfileType>().Description("Данные профиля пользователя");
+        }
     }
 }

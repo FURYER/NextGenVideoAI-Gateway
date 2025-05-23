@@ -1,0 +1,342 @@
+syntax = "proto3";
+
+option csharp_namespace = "NextGenVideoAI.StorageService.Api";
+
+package storage;
+
+// Сервис для работы с файловым хранилищем
+service Storage {
+  // Загрузка файла (потоковая)
+  rpc UploadFileStream (stream UploadFileChunkRequest) returns (UploadFileResponse);
+  
+  // Получение информации о файле
+  rpc GetFileInfo (GetFileInfoRequest) returns (GetFileInfoResponse);
+  
+  // Получение метаданных файла
+  rpc GetFileMetadata (GetFileMetadataRequest) returns (GetFileMetadataResponse);
+  
+  // Скачивание файла (потоковая)
+  rpc DownloadFileStream (DownloadFileRequest) returns (stream DownloadFileChunkResponse);
+  
+  // Удаление файла
+  rpc DeleteFile (DeleteFileRequest) returns (DeleteFileResponse);
+  
+  // Получение списка файлов пользователя
+  rpc GetUserFiles (GetUserFilesRequest) returns (GetUserFilesResponse);
+  
+  // Инициализация фрагментированной загрузки
+  rpc InitChunkedUpload (InitChunkedUploadRequest) returns (InitChunkedUploadResponse);
+  
+  // Загрузка части файла
+  rpc UploadFileChunk (UploadFileChunkRequest) returns (UploadFileChunkResponse);
+  
+  // Загрузка части файла с Etag
+  rpc UploadChunk (UploadChunkRequest) returns (UploadChunkResponse);
+  
+  // Завершение фрагментированной загрузки
+  rpc CompleteChunkedUpload (CompleteChunkedUploadRequest) returns (UploadFileResponse);
+  
+  // Отмена фрагментированной загрузки
+  rpc CancelChunkedUpload (CancelChunkedUploadRequest) returns (CancelChunkedUploadResponse);
+  
+  // Получение статуса загрузки
+  rpc GetUploadStatus (GetUploadStatusRequest) returns (GetUploadStatusResponse);
+  
+  // Получение информации о квоте пользователя
+  rpc GetUserQuotaInfo (GetUserQuotaInfoRequest) returns (GetUserQuotaInfoResponse);
+  
+  // Получение части файла
+  rpc GetFileChunk (GetFileChunkRequest) returns (GetFileChunkResponse);
+  
+  // Инициализация фрагментированной скачки
+  rpc InitChunkedDownload (InitChunkedDownloadRequest) returns (InitChunkedDownloadResponse);
+  
+  // Получение фрагмента файла
+  rpc GetChunk (GetChunkRequest) returns (GetChunkResponse);
+
+  // Получение URL для скачивания файла
+  rpc GetFileDownloadUrl (GetFileDownloadUrlRequest) returns (GetFileDownloadUrlResponse);
+}
+
+// Запрос на загрузку части файла (для потоковой загрузки)
+message UploadFileChunkRequest {
+  // Информация о файле (только в первом чанке)
+  string user_id = 1;            // Идентификатор пользователя
+  string chat_id = 2;            // Идентификатор чата (опционально)
+  string file_name = 3;          // Имя файла
+  string content_type = 4;       // MIME-тип файла
+  int64 total_size = 5;          // Общий размер файла в байтах
+  
+  // Информация о чанке
+  bytes chunk_data = 6;          // Данные чанка
+  int32 chunk_index = 7;         // Индекс чанка (начиная с 0)
+  bool is_last_chunk = 8;        // Флаг последнего чанка
+  string upload_id = 9;          // Идентификатор загрузки
+}
+
+// Ответ на запрос загрузки файла
+message UploadFileResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string file_id = 3;            // Идентификатор загруженного файла
+  string file_name = 4;          // Имя файла
+  string content_type = 5;       // MIME-тип файла
+  int64 file_size = 6;           // Размер файла в байтах
+  string user_id = 7;            // Идентификатор пользователя
+  string chat_id = 8;            // Идентификатор чата (опционально)
+  string created_at = 9;         // Дата создания
+  string last_accessed_at = 10;  // Дата последнего доступа
+}
+
+// Запрос на получение информации о файле
+message GetFileInfoRequest {
+  string file_id = 1;            // Идентификатор файла
+}
+
+// Ответ с информацией о файле
+message GetFileInfoResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string file_id = 3;            // Идентификатор файла
+  string file_name = 4;          // Имя файла
+  string content_type = 5;       // MIME-тип файла
+  int64 file_size = 6;           // Размер файла в байтах
+  string user_id = 7;            // Идентификатор пользователя
+  string chat_id = 8;            // Идентификатор чата (опционально)
+  string created_at = 9;         // Дата создания
+  string last_accessed_at = 10;  // Дата последнего доступа
+}
+
+// Запрос на получение метаданных файла
+message GetFileMetadataRequest {
+  string file_id = 1;            // Идентификатор файла
+}
+
+// Ответ с метаданными файла
+message GetFileMetadataResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string file_name = 3;          // Имя файла
+  string content_type = 4;       // MIME-тип файла
+  int64 size = 5;                // Размер файла в байтах
+}
+
+// Запрос на скачивание файла
+message DownloadFileRequest {
+  string file_id = 1;            // Идентификатор файла
+}
+
+// Чанк файла при потоковой передаче
+message DownloadFileChunkResponse {
+  // Информация о файле (только в первом чанке)
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (только если success = false)
+  string file_name = 3;          // Имя файла (только в первом чанке)
+  string content_type = 4;       // MIME-тип файла (только в первом чанке)
+  int64 total_size = 5;          // Общий размер файла в байтах (только в первом чанке)
+  
+  // Информация о чанке
+  bytes chunk_data = 6;          // Данные чанка
+  int32 chunk_index = 7;         // Индекс чанка (начиная с 0)
+  bool is_last_chunk = 8;        // Флаг последнего чанка
+}
+
+// Запрос на удаление файла
+message DeleteFileRequest {
+  string file_id = 1;            // Идентификатор файла
+}
+
+// Ответ на запрос удаления файла
+message DeleteFileResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+}
+
+// Запрос на получение списка файлов пользователя
+message GetUserFilesRequest {
+  string user_id = 1;            // Идентификатор пользователя
+  string chat_id = 2;            // Идентификатор чата (опционально)
+  int32 skip = 3;                // Количество файлов для пропуска (пагинация)
+  int32 limit = 4;               // Максимальное количество файлов (пагинация)
+}
+
+// Информация о файле
+message FileInfo {
+  string file_id = 1;            // Идентификатор файла
+  string file_name = 2;          // Имя файла
+  string content_type = 3;       // MIME-тип файла
+  int64 file_size = 4;           // Размер файла в байтах
+  string user_id = 5;            // Идентификатор пользователя
+  string chat_id = 6;            // Идентификатор чата (опционально)
+  string created_at = 7;         // Дата создания
+  string last_accessed_at = 8;   // Дата последнего доступа
+}
+
+// Ответ со списком файлов пользователя
+message GetUserFilesResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  repeated FileInfo files = 3;   // Список файлов
+  int32 total_count = 4;         // Общее количество файлов
+}
+
+// Запрос на инициализацию фрагментированной загрузки
+message InitChunkedUploadRequest {
+  string user_id = 1;            // Идентификатор пользователя
+  string chat_id = 2;            // Идентификатор чата (опционально)
+  string file_name = 3;          // Имя файла
+  string content_type = 4;       // MIME-тип файла
+  int64 total_size = 5;          // Общий размер файла в байтах
+  int32 total_chunks = 6;        // Общее количество фрагментов
+}
+
+// Предподписанная ссылка для загрузки с номером части
+message PresignedUrlInfo {
+  string url = 1;                // URL для загрузки
+  int32 part_number = 2;         // Номер части
+}
+
+// Ответ на запрос инициализации фрагментированной загрузки
+message InitChunkedUploadResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string upload_id = 3;          // Идентификатор загрузки
+  repeated string presigned_urls = 4; // Предподписанные URL для загрузки (устаревшее)
+  repeated PresignedUrlInfo presigned_url_infos = 5; // Предподписанные URL с номерами частей
+}
+
+// Ответ на запрос загрузки части файла
+message UploadFileChunkResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  int32 chunk_index = 3;         // Индекс обработанного фрагмента
+  double progress = 4;            // Прогресс загрузки в процентах
+}
+
+// Запрос на завершение фрагментированной загрузки
+message CompleteChunkedUploadRequest {
+  string upload_id = 1;          // Идентификатор загрузки
+  string user_id = 2;            // Идентификатор пользователя
+}
+
+// Запрос на отмену фрагментированной загрузки
+message CancelChunkedUploadRequest {
+  string upload_id = 1;          // Идентификатор загрузки
+  string user_id = 2;            // Идентификатор пользователя
+}
+
+// Ответ на запрос отмены фрагментированной загрузки
+message CancelChunkedUploadResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+}
+
+// Запрос на получение статуса загрузки
+message GetUploadStatusRequest {
+  string upload_id = 1;          // Идентификатор загрузки
+}
+
+// Ответ на запрос статуса загрузки
+message GetUploadStatusResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string upload_id = 3;          // Идентификатор загрузки
+  string file_name = 4;          // Имя файла
+  string content_type = 5;       // MIME-тип файла
+  int64 total_size = 6;          // Общий размер файла в байтах
+  int32 total_chunks = 7;        // Общее количество фрагментов
+  repeated int32 uploaded_chunks = 8; // Индексы загруженных фрагментов
+  bool is_complete = 9;          // Завершена ли загрузка
+  string file_id = 10;           // Идентификатор файла (после завершения)
+  string created_at = 11;        // Дата создания загрузки
+  string last_updated_at = 12;   // Дата последнего обновления
+  string status = 13;            // Статус загрузки (PENDING, IN_PROGRESS, COMPLETED, ERROR)
+}
+
+// Запрос на получение информации о квоте пользователя
+message GetUserQuotaInfoRequest {
+  string user_id = 1;            // Идентификатор пользователя
+}
+
+// Ответ с информацией о квоте пользователя
+message GetUserQuotaInfoResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  int64 storageQuota = 3;        // Общая квота пользователя в байтах
+  int64 usedStorage = 4;         // Использованное пространство в байтах
+}
+
+// Запрос на получение части файла
+message GetFileChunkRequest {
+  string file_id = 1;
+  int64 start = 2;
+  int64 end = 3;
+}
+
+// Ответ на запрос получения части файла
+message GetFileChunkResponse {
+  bytes chunk_data = 1;
+  string file_name = 2;
+  string content_type = 3;
+  int64 total_size = 4;
+}
+
+// Тип для инициализации фрагментированной скачки
+message InitChunkedDownloadRequest {
+  string file_id = 1;            // Идентификатор файла
+  string user_id = 2;            // Идентификатор пользователя
+}
+
+// Тип для результата инициализации фрагментированной скачки
+message InitChunkedDownloadResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string download_id = 3;        // Идентификатор скачки
+  string file_name = 4;          // Имя файла
+  string content_type = 5;       // MIME-тип файла
+  int64 total_size = 6;          // Общий размер файла
+  int32 total_chunks = 7;        // Общее количество фрагментов
+}
+
+// Тип для запроса фрагмента файла
+message GetChunkRequest {
+  string download_id = 1;        // Идентификатор скачки
+  int32 chunk_index = 2;         // Индекс фрагмента
+}
+
+// Тип для результата получения фрагмента
+message GetChunkResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  bytes chunk_data = 3;          // Данные фрагмента
+  int32 chunk_index = 4;         // Индекс фрагмента
+  bool is_last_chunk = 5;        // Флаг последнего фрагмента
+}
+
+// Запрос на получение URL для скачивания файла
+message GetFileDownloadUrlRequest {
+  string file_id = 1;            // Идентификатор файла
+}
+
+// Ответ с URL для скачивания файла
+message GetFileDownloadUrlResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  string url = 3;                // URL для скачивания файла
+}
+
+// Запрос на загрузку части файла с Etag
+message UploadChunkRequest {
+  string upload_id = 1;          // Идентификатор загрузки
+  int32 chunk_index = 2;         // Индекс фрагмента
+  string etag = 3;               // ETag от загрузки части
+}
+
+// Ответ на запрос загрузки части файла с Etag
+message UploadChunkResponse {
+  bool success = 1;              // Флаг успешности операции
+  string error_message = 2;      // Сообщение об ошибке (если есть)
+  int32 chunk_index = 3;         // Индекс обработанного фрагмента
+  string upload_id = 4;          // Идентификатор загрузки
+  double progress = 5;           // Прогресс загрузки в процентах
+} 
