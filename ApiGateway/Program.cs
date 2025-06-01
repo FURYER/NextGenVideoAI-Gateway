@@ -465,9 +465,9 @@ public class Program
                         endpoints.MapGraphQL("/graphql")
                             .WithOptions(new GraphQLServerOptions
                             {
-                                Tool = { Enable = true }, // Включаем GraphiQL UI
-                                EnableSchemaRequests = true, // Включаем запросы схемы
-                                AllowedGetOperations = AllowedGetOperations.QueryAndMutation // Разрешаем GET запросы для Query и Mutation
+                                Tool = { Enable = false }, // Полностью отключает UI
+                                EnableSchemaRequests = false, // Отключает скачивание схемы
+                                AllowedGetOperations = AllowedGetOperations.QueryAndMutation
                             });
 
                         endpoints.MapGet("/", async context =>
