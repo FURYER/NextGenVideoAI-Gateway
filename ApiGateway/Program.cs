@@ -33,6 +33,7 @@ using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
 using ApiGateway.GraphQL.Subscriptions;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Mvc;
+using UserService.Protos;
 
 public class Program
 {
@@ -391,6 +392,14 @@ public class Program
                             }
                         };
                     });
+
+                    // Регистрируем UserServiceClient в DI
+                    services.AddSingleton<UserService.Protos.UserService.UserServiceClient>(sp =>
+                    {
+                        var userServiceUrl = Environment.GetEnvironmentVariable("USER_SERVICE_URL");
+                        var channel = Grpc.Net.Client.GrpcChannel.ForAddress(userServiceUrl!);
+                        return new UserService.Protos.UserService.UserServiceClient(channel);
+                    });
                 })
                 .ConfigureKestrel(serverOptions =>
                 {
@@ -456,9 +465,9 @@ public class Program
                         endpoints.MapGraphQL("/graphql")
                             .WithOptions(new GraphQLServerOptions
                             {
-                                Tool = { Enable = true }, // Включаем GraphiQL UI
-                                EnableSchemaRequests = true, // Включаем запросы схемы
-                                AllowedGetOperations = AllowedGetOperations.QueryAndMutation // Разрешаем GET запросы для Query и Mutation
+                                Tool = { Enable = false }, // Полностью отключает UI
+                                EnableSchemaRequests = false, // Отключает скачивание схемы
+                                AllowedGetOperations = AllowedGetOperations.QueryAndMutation
                             });
 
                         endpoints.MapGet("/", async context =>

@@ -73,25 +73,20 @@ namespace ApiGateway.GraphQL
                 {
                     try
                     {
-                        // Получаем информацию о пользователе из токена
-                        var jwtToken = new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadToken(token) as System.IdentityModel.Tokens.Jwt.JwtSecurityToken;
-                        if (jwtToken != null)
+                        var validateResponse = await _userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
+                        if (!validateResponse.IsValid)
                         {
-                            var userId = jwtToken.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
-                            if (userId != null)
-                            {
-                                _logger.LogInformation("Token validated successfully for user {UserId}", userId);
-                                // Добавляем информацию о пользователе в контекст
-                                context.SetLocalState("UserId", userId);
-                                context.SetLocalState("TokenInfo", new { UserId = userId });
-                                return HotChocolate.Authorization.AuthorizeResult.Allowed;
-                            }
+                            _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
+                            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
                         }
-                        _logger.LogWarning("Token validation failed - invalid token format");
+                        _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
+                        context.SetLocalState("UserId", validateResponse.UserId);
+                        context.SetLocalState("TokenInfo", validateResponse.TokenInfo);
+                        return HotChocolate.Authorization.AuthorizeResult.Allowed;
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error validating token: {Error}", ex.Message);
+                        _logger.LogError(ex, "Error validating token via UserService: {Error}", ex.Message);
                     }
                 }
                 else
@@ -169,28 +164,18 @@ namespace ApiGateway.GraphQL
                 {
                     try
                     {
-                        // Получаем информацию о пользователе из токена
-                        var jwtToken = await Task.Run(() =>
-                            new System.IdentityModel.Tokens.Jwt.JwtSecurityTokenHandler().ReadToken(token) as System.IdentityModel.Tokens.Jwt.JwtSecurityToken,
-                            cancellationToken);
-
-                        if (jwtToken != null)
+                        var validateResponse = await _userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
+                        if (!validateResponse.IsValid)
                         {
-                            var userId = await Task.Run(() =>
-                                jwtToken.Claims.FirstOrDefault(c => c.Type == "sub")?.Value,
-                                cancellationToken);
-
-                            if (userId != null)
-                            {
-                                _logger.LogInformation("Token validated successfully for user {UserId}", userId);
-                                return HotChocolate.Authorization.AuthorizeResult.Allowed;
-                            }
+                            _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
+                            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
                         }
-                        _logger.LogWarning("Token validation failed - invalid token format");
+                        _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
+                        return HotChocolate.Authorization.AuthorizeResult.Allowed;
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Error validating token: {Error}", ex.Message);
+                        _logger.LogError(ex, "Error validating token via UserService: {Error}", ex.Message);
                     }
                 }
                 else
