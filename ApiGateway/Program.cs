@@ -466,7 +466,7 @@ public class Program
                             .WithOptions(new GraphQLServerOptions
                             {
                                 Tool = { Enable = false }, // Полностью отключает UI
-                                EnableSchemaRequests = false, // Отключает скачивание схемы
+                                EnableSchemaRequests = true, // Отключает скачивание схемы
                                 AllowedGetOperations = AllowedGetOperations.QueryAndMutation
                             });
 
