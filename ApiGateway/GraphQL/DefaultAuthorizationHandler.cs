@@ -44,6 +44,7 @@ namespace ApiGateway.GraphQL
             HotChocolate.Authorization.AuthorizeDirective directive,
             CancellationToken cancellationToken = default)
         {
+            _logger.LogWarning("AuthorizeAsync: directive.Policy = {Policy}", directive.Policy);
             // Разрешаем анонимный доступ к схеме
             if (await Task.Run(() => IsSchemaQuery(context), cancellationToken))
             {
@@ -77,6 +78,8 @@ namespace ApiGateway.GraphQL
                         if (!validateResponse.IsValid)
                         {
                             _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
+                            httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                            httpContext.Response.Headers["Token-Expired"] = "true";
                             return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
                         }
                         _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
@@ -107,6 +110,7 @@ namespace ApiGateway.GraphQL
             IReadOnlyList<HotChocolate.Authorization.AuthorizeDirective> directives,
             CancellationToken cancellationToken = default)
         {
+            _logger.LogWarning("AuthorizeAsync: директивы = {Policies}", string.Join(",", directives.Select(d => d.Policy)));
             // Логируем входящий контекст для диагностики
             _logger.LogInformation("AuthorizationContext типа: {ContextType}", context.GetType().Name);
 
@@ -168,6 +172,8 @@ namespace ApiGateway.GraphQL
                         if (!validateResponse.IsValid)
                         {
                             _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
+                            httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                            httpContext.Response.Headers["Token-Expired"] = "true";
                             return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
                         }
                         _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);

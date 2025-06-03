@@ -27,6 +27,7 @@ namespace ApiGateway.Services
         public string? Error { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
         public DateTime LastUpdatedAt { get; set; } = DateTime.UtcNow;
+        public List<ApiGateway.GraphQL.ChunkEtagInfo>? ChunkEtags { get; set; }
     }
 
     // Временная реализация с использованием памяти (для тестирования)

@@ -81,7 +81,7 @@ namespace ApiGateway.GraphQL
                         chunk.FileName = fileName;
                         chunk.ContentType = contentType;
                         chunk.TotalSize = totalSize;
-
+                        chunk.IsAiGenerated = false; // По умолчанию false
                         if (!string.IsNullOrEmpty(chatId))
                         {
                             chunk.ChatId = chatId;
@@ -137,7 +137,8 @@ namespace ApiGateway.GraphQL
                     UserId = response.UserId,
                     ChatId = response.ChatId,
                     CreatedAt = response.CreatedAt,
-                    LastAccessedAt = response.LastAccessedAt
+                    LastAccessedAt = response.LastAccessedAt,
+                    IsAiGenerated = response.IsAiGenerated
                 };
             }
             catch (RpcException ex)
@@ -308,7 +309,8 @@ namespace ApiGateway.GraphQL
                     UserId = file.UserId,
                     ChatId = file.ChatId,
                     CreatedAt = file.CreatedAt,
-                    LastAccessedAt = file.LastAccessedAt
+                    LastAccessedAt = file.LastAccessedAt,
+                    IsAiGenerated = file.IsAiGenerated
                 }).ToList();
             }
             catch (RpcException ex)
@@ -375,7 +377,8 @@ namespace ApiGateway.GraphQL
                     presignedUrlInfos = response.PresignedUrlInfos.Select(p => new PresignedUrl
                     {
                         Url = p.Url,
-                        PartNumber = p.PartNumber
+                        PartNumber = p.PartNumber,
+                        Etag = p.Etag
                     }).ToList();
                 }
 
@@ -596,7 +599,14 @@ namespace ApiGateway.GraphQL
                     CreatedAt = response.CreatedAt,
                     LastUpdatedAt = response.LastUpdatedAt,
                     Status = response.Status,
-                    Error = response.ErrorMessage
+                    Error = response.ErrorMessage,
+                    ChunkEtags = response.ChunkEtags != null
+                        ? response.ChunkEtags.Select(e => new ChunkEtagInfo
+                        {
+                            ChunkIndex = e.ChunkIndex,
+                            Etag = e.Etag
+                        }).ToList()
+                        : new List<ChunkEtagInfo>()
                 };
             }
             catch (Exception ex)
@@ -620,7 +630,14 @@ namespace ApiGateway.GraphQL
                         CreatedAt = uploadState.CreatedAt.ToString("o"),
                         LastUpdatedAt = uploadState.LastUpdatedAt.ToString("o"),
                         Status = uploadState.Status,
-                        Error = ex.Message
+                        Error = ex.Message,
+                        ChunkEtags = uploadState.ChunkEtags != null
+                            ? uploadState.ChunkEtags.Select(e => new ChunkEtagInfo
+                            {
+                                ChunkIndex = e.ChunkIndex,
+                                Etag = e.Etag
+                            }).ToList()
+                            : new List<ChunkEtagInfo>()
                     };
                 }
 
@@ -648,7 +665,9 @@ namespace ApiGateway.GraphQL
                     Success = response.Success,
                     ErrorMessage = response.ErrorMessage,
                     StorageQuota = response.StorageQuota,
-                    UsedStorage = response.UsedStorage
+                    UsedStorage = response.UsedStorage,
+                    AiStorageQuota = response.AiStorageQuota,
+                    UsedAiStorage = response.UsedAiStorage
                 };
             }
             catch (RpcException ex)

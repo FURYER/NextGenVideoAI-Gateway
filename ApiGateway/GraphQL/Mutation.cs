@@ -121,5 +121,27 @@ namespace ApiGateway.GraphQL
         {
             return await resolver.CancelChunkedUpload(uploadId, userId);
         }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<UpdateChatPayload> UpdateChat([Service] ChatResolver resolver, UpdateChatInput input)
+        {
+            try
+            {
+                var chat = await resolver.UpdateChat(input);
+                return new UpdateChatPayload
+                {
+                    Success = true,
+                    Chat = chat
+                };
+            }
+            catch (Exception ex)
+            {
+                return new UpdateChatPayload
+                {
+                    Success = false,
+                    ErrorMessage = ex.Message
+                };
+            }
+        }
     }
 }

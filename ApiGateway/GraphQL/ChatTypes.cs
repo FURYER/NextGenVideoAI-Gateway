@@ -146,4 +146,42 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.FileUrl).Type<StringType>().Description("URL файла");
         }
     }
+
+    public class UpdateChatInput
+    {
+        public string ChatId { get; set; } = string.Empty;
+        public string? Name { get; set; }
+        public string? ChatContext { get; set; }
+        public bool? IsBusy { get; set; }
+    }
+
+    public class UpdateChatInputType : InputObjectType<UpdateChatInput>
+    {
+        protected override void Configure(IInputObjectTypeDescriptor<UpdateChatInput> descriptor)
+        {
+            descriptor.Description("Входные данные для обновления чата (контекста, названия и статуса занятости)");
+            descriptor.Field(f => f.ChatId).Type<NonNullType<StringType>>().Description("ID чата");
+            descriptor.Field(f => f.Name).Type<StringType>().Description("Новое имя чата (опционально)");
+            descriptor.Field(f => f.ChatContext).Type<StringType>().Description("Новый контекст чата (опционально)");
+            descriptor.Field(f => f.IsBusy).Type<BooleanType>().Description("Установить статус занятости (опционально)");
+        }
+    }
+
+    public class UpdateChatPayload
+    {
+        public bool Success { get; set; }
+        public string? ErrorMessage { get; set; }
+        public Chat? Chat { get; set; }
+    }
+
+    public class UpdateChatPayloadType : ObjectType<UpdateChatPayload>
+    {
+        protected override void Configure(IObjectTypeDescriptor<UpdateChatPayload> descriptor)
+        {
+            descriptor.Description("Результат обновления чата");
+            descriptor.Field(f => f.Success).Type<NonNullType<BooleanType>>().Description("Успешность операции");
+            descriptor.Field(f => f.ErrorMessage).Type<StringType>().Description("Сообщение об ошибке");
+            descriptor.Field(f => f.Chat).Type<ChatType>().Description("Обновлённый чат");
+        }
+    }
 }

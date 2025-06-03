@@ -46,6 +46,7 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.ChatId).Type<StringType>().Description("ID чата, к которому относится файл (опционально)");
             descriptor.Field(f => f.CreatedAt).Type<NonNullType<StringType>>().Description("Дата создания файла");
             descriptor.Field(f => f.LastAccessedAt).Type<NonNullType<StringType>>().Description("Дата последнего доступа к файлу");
+            descriptor.Field(f => f.IsAiGenerated).Type<NonNullType<BooleanType>>().Description("Файл создан ИИ");
         }
     }
 
@@ -60,6 +61,7 @@ namespace ApiGateway.GraphQL
         public string? ChatId { get; set; }
         public string CreatedAt { get; set; } = string.Empty;
         public string LastAccessedAt { get; set; } = string.Empty;
+        public bool IsAiGenerated { get; set; }
     }
 
     // Тип для результата загрузки файла
@@ -189,6 +191,7 @@ namespace ApiGateway.GraphQL
     {
         public string Url { get; set; } = string.Empty;
         public int PartNumber { get; set; }
+        public string? Etag { get; set; }
     }
 
     public class PresignedUrlType : ObjectType<PresignedUrl>
@@ -198,6 +201,7 @@ namespace ApiGateway.GraphQL
             descriptor.Description("Предподписанная ссылка для загрузки части файла");
             descriptor.Field(f => f.Url).Type<NonNullType<StringType>>().Description("URL для загрузки части файла");
             descriptor.Field(f => f.PartNumber).Type<NonNullType<IntType>>().Description("Номер части (начиная с 1)");
+            descriptor.Field(f => f.Etag).Type<StringType>().Description("Etag для части (если есть)");
         }
     }
 
@@ -327,6 +331,7 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.LastUpdatedAt).Type<StringType>().Description("Дата последнего обновления");
             descriptor.Field(f => f.Status).Type<StringType>().Description("Статус загрузки (PENDING, IN_PROGRESS, COMPLETED, ERROR)");
             descriptor.Field(f => f.Error).Type<StringType>().Description("Сообщение об ошибке (если есть)");
+            descriptor.Field(f => f.ChunkEtags).Type<ListType<ChunkEtagInfoType>>().Description("Etag для каждого чанка");
         }
     }
 
@@ -345,6 +350,23 @@ namespace ApiGateway.GraphQL
         public string? LastUpdatedAt { get; set; }
         public string? Status { get; set; }
         public string? Error { get; set; }
+        public List<ChunkEtagInfo>? ChunkEtags { get; set; }
+    }
+
+    public class ChunkEtagInfo
+    {
+        public int ChunkIndex { get; set; }
+        public string? Etag { get; set; }
+    }
+
+    public class ChunkEtagInfoType : ObjectType<ChunkEtagInfo>
+    {
+        protected override void Configure(IObjectTypeDescriptor<ChunkEtagInfo> descriptor)
+        {
+            descriptor.Description("Информация о Etag для чанка");
+            descriptor.Field(f => f.ChunkIndex).Type<NonNullType<IntType>>().Description("Индекс чанка");
+            descriptor.Field(f => f.Etag).Type<StringType>().Description("Etag");
+        }
     }
 
     // Тип для прогресса загрузки (для подписки)
@@ -391,6 +413,8 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.ErrorMessage).Type<StringType>().Description("Сообщение об ошибке (если есть)");
             descriptor.Field(f => f.StorageQuota).Type<LongType>().Description("Общая квота пользователя в байтах");
             descriptor.Field(f => f.UsedStorage).Type<LongType>().Description("Использованное пространство в байтах");
+            descriptor.Field(f => f.AiStorageQuota).Type<LongType>().Description("Квота для файлов от ИИ в байтах");
+            descriptor.Field(f => f.UsedAiStorage).Type<LongType>().Description("Использованное пространство для файлов от ИИ в байтах");
         }
     }
 
@@ -401,6 +425,8 @@ namespace ApiGateway.GraphQL
         public string? ErrorMessage { get; set; }
         public long? StorageQuota { get; set; }
         public long? UsedStorage { get; set; }
+        public long? AiStorageQuota { get; set; }
+        public long? UsedAiStorage { get; set; }
     }
 
     public class FileChunkResponse

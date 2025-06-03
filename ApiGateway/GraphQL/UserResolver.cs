@@ -206,15 +206,6 @@ namespace ApiGateway.GraphQL
             try
             {
                 // Проверяем refresh токен через UserService
-                var validateResponse = await _client.ValidateTokenAsync(new ValidateTokenRequest { Token = refreshToken });
-                if (!validateResponse.IsValid)
-                {
-                    return new AuthResponse
-                    {
-                        Success = false,
-                        Message = "Refresh token is not valid or revoked"
-                    };
-                }
                 var response = await _client.RefreshTokenAsync(new RefreshTokenRequest
                 {
                     RefreshToken = refreshToken

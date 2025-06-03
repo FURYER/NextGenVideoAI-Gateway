@@ -413,5 +413,37 @@ namespace ApiGateway.GraphQL
                 }
             }
         }
+
+        public async Task<Chat> UpdateChat(UpdateChatInput input)
+        {
+            try
+            {
+                _logger.LogInformation("Обновление чата {ChatId} (имя: {Name}, контекст: {Context}, isBusy: {IsBusy})", input.ChatId, input.Name, input.ChatContext, input.IsBusy);
+                var request = new UpdateChatRequest
+                {
+                    ChatId = input.ChatId,
+                    Name = input.Name ?? string.Empty,
+                    ChatContext = input.ChatContext ?? string.Empty
+                };
+                if (input.IsBusy.HasValue)
+                {
+                    request.IsBusy = input.IsBusy.Value;
+                }
+                var response = await _client.UpdateChatAsync(request);
+                var chat = response.Chat;
+                return new Chat
+                {
+                    Id = chat.Id,
+                    Title = chat.Name,
+                    LastUpdate = DateTime.Parse(chat.LastUpdate),
+                    IsBusy = chat.IsBusy
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Ошибка при обновлении чата {ChatId}: {Error}", input.ChatId, ex.Message);
+                throw;
+            }
+        }
     }
 }

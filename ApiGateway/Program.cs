@@ -245,6 +245,8 @@ public class Program
                         .AddType<SenderTypeType>()
                         .AddType<ChatStreamResponseType>()
                         .AddType<StreamChatInputType>()
+                        .AddType<UpdateChatInputType>()
+                        .AddType<UpdateChatPayloadType>()
                         .AddType<NotificationType>()
                         // Добавляем типы хранилища файлов
                         .AddType<FileInfoType>()
