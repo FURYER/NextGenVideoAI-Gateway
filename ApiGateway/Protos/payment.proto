@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+option csharp_namespace = "NextGenVideoAI.PaymentService.Api";
+
+package payment;
+
+service PaymentService {
+  rpc CreatePayment (CreatePaymentRequest) returns (CreatePaymentResponse);
+  rpc PaymentWebhook (PaymentWebhookRequest) returns (PaymentWebhookResponse);
+  rpc GetUserSubscription (GetUserSubscriptionRequest) returns (GetUserSubscriptionResponse);
+  rpc GetSubscriptionTypes (GetSubscriptionTypesRequest) returns (GetSubscriptionTypesResponse);
+  rpc UseDemoQuota (UseDemoQuotaRequest) returns (UseDemoQuotaResponse);
+  rpc GetUserQuota (GetUserQuotaRequest) returns (GetUserQuotaResponse);
+}
+
+message CreatePaymentRequest {
+  string user_id = 1;
+  string subscription_type_id = 2;
+  string payment_method = 3;
+}
+
+message CreatePaymentResponse {
+  string payment_id = 1;
+  string payment_url = 2;
+  string status = 3;
+}
+
+message PaymentWebhookRequest {
+  string payment_id = 1;
+  string status = 2;
+  string provider_payload = 3;
+}
+
+message PaymentWebhookResponse {
+  bool success = 1;
+}
+
+message GetUserSubscriptionRequest {
+  string user_id = 1;
+}
+
+message GetUserSubscriptionResponse {
+  string subscription_type = 1;
+  string status = 2;
+  string expires_at = 3;
+}
+
+message GetSubscriptionTypesRequest {}
+
+message SubscriptionTypeInfo {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  double price = 4;
+  int32 duration_days = 5;
+}
+
+message GetSubscriptionTypesResponse {
+  repeated SubscriptionTypeInfo types = 1;
+}
+
+message UseDemoQuotaRequest {
+  string user_id = 1;
+}
+
+message UseDemoQuotaResponse {
+  int32 demo_quota_left = 1;
+  bool allowed = 2;
+}
+
+message GetUserQuotaRequest {
+  string user_id = 1;
+}
+
+message GetUserQuotaResponse {
+  int32 quota_left = 1;
+} 

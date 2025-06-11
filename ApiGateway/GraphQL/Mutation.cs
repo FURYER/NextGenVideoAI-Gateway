@@ -2,6 +2,7 @@
 using HotChocolate.Authorization;
 using Microsoft.AspNetCore.Authorization;
 using HotChocolate.Types;
+using ApiGateway.Services;
 
 namespace ApiGateway.GraphQL
 {
@@ -32,7 +33,7 @@ namespace ApiGateway.GraphQL
         }
 
         [HotChocolate.Authorization.Authorize]
-        public async Task<ChatMessage> SendMessage([Service] ChatResolver resolver, string chatId, string content, string userId,
+        public async Task<ChatMessage?> SendMessage([Service] ChatResolver resolver, string chatId, string content, string userId,
             bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null)
         {
             return await resolver.SendMessage(chatId, content, userId, requiresEditing, isEditingStage, attachments);
@@ -142,6 +143,47 @@ namespace ApiGateway.GraphQL
                     ErrorMessage = ex.Message
                 };
             }
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<bool> StopMontage(
+            [Service] IRabbitMQService rabbitMQService,
+            string userId,
+            string chatId,
+            string? messageId = null)
+        {
+            await rabbitMQService.PublishMontageStopCommandAsync(userId, chatId, messageId);
+            return true;
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<EmailCodePayload> RequestEmailCode([Service] UserResolver resolver, EmailCodeInput input)
+        {
+            return await resolver.RequestEmailCode(input);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<EmailCodePayload> ConfirmEmailCode([Service] UserResolver resolver, ConfirmEmailCodeInput input)
+        {
+            return await resolver.ConfirmEmailCode(input);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<CreatePaymentPayload> CreatePayment([Service] PaymentResolver resolver, CreatePaymentInput input)
+        {
+            return await resolver.CreatePayment(input);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<PaymentWebhookPayload> PaymentWebhook([Service] PaymentResolver resolver, PaymentWebhookInput input)
+        {
+            return await resolver.PaymentWebhook(input);
+        }
+
+        [HotChocolate.Authorization.Authorize]
+        public async Task<UseDemoQuotaPayload> UseDemoQuota([Service] PaymentResolver resolver, string userId)
+        {
+            return await resolver.UseDemoQuota(userId);
         }
     }
 }

@@ -12,5 +12,7 @@ namespace ApiGateway.Models
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public Dictionary<string, object>? Data { get; set; }
+
+        public const string MontageStopType = "montage_stop";
     }
 }

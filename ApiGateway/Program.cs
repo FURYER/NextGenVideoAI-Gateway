@@ -34,6 +34,7 @@ using ApiGateway.GraphQL.Subscriptions;
 using StackExchange.Redis;
 using Microsoft.AspNetCore.Mvc;
 using UserService.Protos;
+using MassTransit;
 
 public class Program
 {
@@ -76,7 +77,13 @@ public class Program
                 {
                     // Регистрируем UserResolver в DI
                     services.AddScoped<UserResolver>();
-                    services.AddScoped<ChatResolver>();
+                    // Регистрируем ChatResolver с поддержкой IPublishEndpoint и PaymentResolver
+                    services.AddScoped<ChatResolver>(sp => new ChatResolver(
+                        sp.GetRequiredService<ILogger<ChatResolver>>(),
+                        sp.GetRequiredService<IHttpContextAccessor>(),
+                        sp.GetRequiredService<IPublishEndpoint>(),
+                        sp.GetRequiredService<PaymentResolver>()
+                    ));
                     // Регистрируем StorageResolver в DI
                     services.AddScoped<StorageResolver>();
 
@@ -85,6 +92,8 @@ public class Program
 
                     // Регистрируем StorageService в DI
                     services.AddScoped<IStorageService, StorageService>();
+
+                    services.AddScoped<PaymentResolver>();
 
                     // Добавляем HttpContextAccessor
                     services.AddHttpContextAccessor();
@@ -241,6 +250,9 @@ public class Program
                         .AddType<RegisterUserInputType>()
                         .AddType<LoginInputType>()
                         .AddType<AuthResponseType>()
+                        .AddType<EmailCodeInputType>()
+                        .AddType<ConfirmEmailCodeInputType>()
+                        .AddType<EmailCodePayloadType>()
                         .AddType<ChatMessageType>()
                         .AddType<SenderTypeType>()
                         .AddType<ChatStreamResponseType>()
@@ -292,7 +304,15 @@ public class Program
                             }
                             return error;
                         })
-                        .AddInMemorySubscriptions();
+                        .AddInMemorySubscriptions()
+                        // Регистрируем PaymentResolver в DI
+                        .AddType<PaymentResolver>()
+                        .AddType<GetUserSubscriptionPayloadType>()
+                        .AddType<GetSubscriptionTypesPayloadType>()
+                        .AddType<SubscriptionTypeInfoDtoType>()
+                        .AddType<CreatePaymentInputType>()
+                        .AddType<PaymentWebhookInputType>()
+                        .AddType<GetUserQuotaPayloadType>();
 
                     // Настраиваем endpoint
                     services.Configure<GraphQLServerOptions>(options =>
@@ -401,6 +421,26 @@ public class Program
                         var userServiceUrl = Environment.GetEnvironmentVariable("USER_SERVICE_URL");
                         var channel = Grpc.Net.Client.GrpcChannel.ForAddress(userServiceUrl!);
                         return new UserService.Protos.UserService.UserServiceClient(channel);
+                    });
+
+                    // Настраиваем MassTransit с RabbitMQ (через переменные окружения)
+                    services.AddMassTransit(x =>
+                    {
+                        x.UsingRabbitMq((context, cfg) =>
+                        {
+                            var rabbitHost = Environment.GetEnvironmentVariable("RABBITMQ_HOST") ?? "localhost";
+                            var rabbitPort = Environment.GetEnvironmentVariable("RABBITMQ_PORT");
+                            var rabbitUser = Environment.GetEnvironmentVariable("RABBITMQ_USERNAME") ?? "guest";
+                            var rabbitPass = Environment.GetEnvironmentVariable("RABBITMQ_PASSWORD") ?? "guest";
+
+                            ushort port = 5672;
+                            var hostWithPort = port != 5672 ? $"{rabbitHost}:{port}" : rabbitHost;
+                            cfg.Host(hostWithPort, "/", h =>
+                            {
+                                h.Username(rabbitUser);
+                                h.Password(rabbitPass);
+                            });
+                        });
                     });
                 })
                 .ConfigureKestrel(serverOptions =>

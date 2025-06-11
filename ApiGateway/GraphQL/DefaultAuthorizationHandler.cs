@@ -85,6 +85,17 @@ namespace ApiGateway.GraphQL
                         _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
                         context.SetLocalState("UserId", validateResponse.UserId);
                         context.SetLocalState("TokenInfo", validateResponse.TokenInfo);
+
+                        // Проверка наличия email
+                        var allowedWithoutEmail = new[] { "login", "registerUser", "requestEmailCode", "confirmEmailCode", "refreshToken" };
+                        var fieldName = context.Selection?.Field?.Name;
+                        if (string.IsNullOrEmpty(validateResponse.TokenInfo.Email) && (fieldName == null || !allowedWithoutEmail.Contains(fieldName, StringComparer.OrdinalIgnoreCase)))
+                        {
+                            _logger.LogWarning("User {UserId} has no email and tried to access {FieldName}", validateResponse.UserId, fieldName);
+                            httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+                            await httpContext.Response.WriteAsync("Доступ запрещён: требуется подтверждённый email");
+                            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+                        }
                         return HotChocolate.Authorization.AuthorizeResult.Allowed;
                     }
                     catch (Exception ex)

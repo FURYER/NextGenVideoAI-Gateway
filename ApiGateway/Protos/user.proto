@@ -12,6 +12,7 @@ message TokenInfo {
   string expires_at = 6;
   string username = 8;
   string user_id = 9;
+  string email = 10;
 }
 
 // Добавляем новый тип для профиля пользователя
@@ -35,21 +36,25 @@ service UserService {
   
   // Метод для получения профиля пользователя
   rpc GetUserProfile (GetUserProfileRequest) returns (GetUserProfileResponse);
+
+  // Методы для работы с email-кодом
+  rpc RequestEmailCode (RequestEmailCodeRequest) returns (RequestEmailCodeResponse);
+  rpc ConfirmEmailCode (ConfirmEmailCodeRequest) returns (ConfirmEmailCodeResponse);
 }
 
 // Обновляем существующие сообщения
 message LoginRequest {
-  string email = 1;
+  string username = 1;
   string password = 2;
-  string device_info = 3;    // Добавляем
-  string ip_address = 4;     // Добавляем
+  string device_info = 3;
+  string ip_address = 4;
 }
 
 message LoginResponse {
   string user_id = 1;
   string access_token = 2;
   string refresh_token = 3;
-  TokenInfo token_info = 4;  // Добавляем
+  TokenInfo token_info = 4;
 }
 
 // Новые сообщения для работы с токенами
@@ -94,17 +99,16 @@ message GetUserProfileResponse {
 // Обновляем существующие сообщения
 message RegisterUserRequest {
   string username = 1;
-  string email = 2;
-  string password = 3;
-  string device_info = 4;    // Добавляем
-  string ip_address = 5;     // Добавляем
+  string password = 2;
+  string device_info = 3;
+  string ip_address = 4;
 }
 
 message RegisterUserResponse {
   string user_id = 1;
   string access_token = 2;
   string refresh_token = 3;
-  TokenInfo token_info = 4;  // Добавляем
+  TokenInfo token_info = 4;
 }
 
 message RefreshTokenRequest {
@@ -114,5 +118,25 @@ message RefreshTokenRequest {
 message RefreshTokenResponse {
   string access_token = 1;
   string refresh_token = 2;
-  TokenInfo token_info = 3;  // Добавляем
+  TokenInfo token_info = 3;
+}
+
+// Email-код: запрос и подтверждение
+message RequestEmailCodeRequest {
+  string user_id = 1;
+  string email = 2;
+}
+
+message RequestEmailCodeResponse {
+  bool success = 1;
+}
+
+message ConfirmEmailCodeRequest {
+  string user_id = 1;
+  string email = 2;
+  string code = 3;
+}
+
+message ConfirmEmailCodeResponse {
+  bool success = 1;
 }

@@ -56,6 +56,7 @@ message SendMessageResponse {
   bool requires_editing = 4;
   bool is_editing_stage = 5;
   repeated AttachmentInfo attachments = 6;
+  bool canceled = 7;
 }
 
 message CreateChatRequest {
@@ -88,6 +89,7 @@ message ChatMessage {
   repeated AttachmentInfo attachments = 8;
   string command_id = 9;
   bool is_completed = 10;
+  bool canceled = 11;
 }
 
 message GetChatMessagesResponse {
@@ -164,6 +166,7 @@ message GetMessageResponse {
   repeated AttachmentInfo attachments = 8;
   string command_id = 9;
   bool is_completed = 10;
+  bool canceled = 11;
 }
 
 // Информация о прикрепленном файле
@@ -171,8 +174,6 @@ message AttachmentInfo {
   string file_id = 1;
   string file_name = 2;
   string content_type = 3;
-  int64 file_size = 4;
-  string file_url = 5;
 }
 
 // Запрос на прикрепление файла к сообщению
@@ -203,7 +204,7 @@ message UpdateChatRequest {
   string chat_id = 1;
   string name = 2; // новое имя (опционально)
   string chat_context = 3; // новый контекст (опционально)
-  bool is_busy = 4; // новое поле для установки статуса занятости
+  bool is_busy = 4; // установить флаг занятости (опционально)
 }
 
 message UpdateChatResponse {

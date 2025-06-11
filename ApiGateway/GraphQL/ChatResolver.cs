@@ -4,6 +4,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using NextGenVideoAI.ChatService.Api;
 using System.IdentityModel.Tokens.Jwt;
+using MassTransit;
+using OrchestrationService.Domain.Events;
 
 namespace ApiGateway.GraphQL
 {
@@ -13,10 +15,15 @@ namespace ApiGateway.GraphQL
         private readonly ILogger<ChatResolver> _logger;
         private readonly IHttpContextAccessor _httpContextAccessor;
         private static readonly Dictionary<string, bool> _activeSubscriptions = new();
+        private readonly IPublishEndpoint _publishEndpoint;
+        private readonly PaymentResolver _paymentResolver;
 
         public ChatResolver(
             ILogger<ChatResolver> logger,
-            IHttpContextAccessor httpContextAccessor)
+            IHttpContextAccessor httpContextAccessor,
+            IPublishEndpoint publishEndpoint,
+            PaymentResolver paymentResolver
+        )
         {
             var chatServiceUrl = Environment.GetEnvironmentVariable("CHAT_SERVICE_URL");
 
@@ -31,12 +38,31 @@ namespace ApiGateway.GraphQL
             _client = new ChatService.ChatServiceClient(channel);
             _logger = logger;
             _httpContextAccessor = httpContextAccessor;
+            _publishEndpoint = publishEndpoint;
+            _paymentResolver = paymentResolver;
         }
 
         public async Task<Chat> CreateChat(string userId)
         {
             try
             {
+                // --- Проверка подписки и demo-квоты ---
+                var subscription = await _paymentResolver.GetUserSubscription(userId);
+                if (subscription.Status == "active")
+                {
+                    // Всё ок, продолжаем
+                }
+                else
+                {
+                    var useDemo = await _paymentResolver.UseDemoQuota(userId);
+                    if (!useDemo.Allowed)
+                    {
+                        _logger.LogWarning("Нет подписки и нет доступных демо-запросов для пользователя {UserId}", userId);
+                        throw new Exception("Нет подписки и нет доступных демо-запросов для создания чата");
+                    }
+                    // Всё ок, продолжаем
+                }
+
                 if (!Guid.TryParse(userId, out Guid userGuid))
                 {
                     throw new ArgumentException("Invalid user ID format", nameof(userId));
@@ -154,13 +180,12 @@ namespace ApiGateway.GraphQL
                     IsEditingStage = msg.IsEditingStage,
                     CommandId = msg.CommandId,
                     IsCompleted = msg.IsCompleted,
+                    Canceled = msg.Canceled,
                     Attachments = msg.Attachments.Select(att => new Attachment
                     {
                         FileId = att.FileId,
                         FileName = att.FileName,
-                        ContentType = att.ContentType,
-                        FileSize = att.FileSize,
-                        FileUrl = att.FileUrl
+                        ContentType = att.ContentType
                     }).ToList()
                 });
             }
@@ -171,12 +196,36 @@ namespace ApiGateway.GraphQL
             }
         }
 
-        public async Task<ChatMessage> SendMessage(string chatId, string content, string userId,
+        public async Task<ChatMessage?> SendMessage(string chatId, string content, string userId,
             bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null)
         {
             try
             {
                 _logger.LogInformation("Отправка сообщения в чат {ChatId} от пользователя {UserId} требует монтажа: {RequiresEditing}", chatId, userId, requiresEditing);
+
+                // --- Проверка подписки и demo-квоты ---
+                var subscription = await _paymentResolver.GetUserSubscription(userId);
+                if (subscription.Status == "active")
+                {
+                    // Всё ок, продолжаем
+                }
+                else
+                {
+                    var quota = await _paymentResolver.GetUserQuota(userId);
+                    if (quota.QuotaLeft > 0)
+                    {
+                        var useDemo = await _paymentResolver.UseDemoQuota(userId);
+                        if (!useDemo.Allowed)
+                            throw new Exception("Нет доступной квоты для отправки сообщения");
+                        // Всё ок, продолжаем
+                    }
+                    else
+                    {
+                        throw new Exception("Нет подписки и нет доступной квоты для отправки сообщения");
+                    }
+                }
+
+                // Обычная отправка через gRPC
                 var request = new SendMessageRequest
                 {
                     ChatId = chatId,
@@ -195,9 +244,7 @@ namespace ApiGateway.GraphQL
                         {
                             FileId = attachment.FileId,
                             FileName = attachment.FileName,
-                            ContentType = attachment.ContentType,
-                            FileSize = attachment.FileSize,
-                            FileUrl = attachment.FileUrl ?? string.Empty
+                            ContentType = attachment.ContentType
                         });
                     }
                 }
@@ -205,7 +252,7 @@ namespace ApiGateway.GraphQL
                 var response = await _client.SendMessageAsync(request);
 
                 _logger.LogInformation("Сообщение {MessageId} успешно отправлено в чат {ChatId}", response.MessageId, chatId);
-                return new ChatMessage
+                ChatMessage message = new ChatMessage
                 {
                     Id = response.MessageId,
                     Content = response.Content,
@@ -215,15 +262,42 @@ namespace ApiGateway.GraphQL
                     ChatId = chatId,
                     RequiresEditing = response.RequiresEditing,
                     IsEditingStage = response.IsEditingStage,
+                    Canceled = response.Canceled,
                     Attachments = response.Attachments.Select(att => new Attachment
                     {
                         FileId = att.FileId,
                         FileName = att.FileName,
-                        ContentType = att.ContentType,
-                        FileSize = att.FileSize,
-                        FileUrl = att.FileUrl
+                        ContentType = att.ContentType
                     }).ToList()
                 };
+
+                if (requiresEditing)
+                {
+                    // Отправка в оркестрацию через MassTransit
+                    var now = DateTime.UtcNow;
+                    var montageMessage = new MontageRequestMessage
+                    {
+                        Id = Guid.Parse(message.Id),
+                        Content = content,
+                        CreatedAt = now,
+                        SenderType = OrchestrationService.Domain.Events.SenderType.USER,
+                        SenderId = userId,
+                        ChatId = Guid.TryParse(chatId, out var chatGuid) ? chatGuid : Guid.Empty,
+                        Chat = chatId,
+                        RequiresEditing = true,
+                        IsEditingStage = isEditingStage,
+                        CommandId = null,
+                        IsCompleted = false,
+                        Canceled = false,
+                    };
+
+                    await _publishEndpoint.Publish(montageMessage);
+
+                    _logger.LogInformation("MontageRequestMessage {MontageId} опубликовано в RabbitMQ для чата {ChatId}", message.Id, chatId);
+
+                }
+
+                return message;
             }
             catch (Exception ex)
             {
@@ -257,13 +331,12 @@ namespace ApiGateway.GraphQL
                     IsEditingStage = response.IsEditingStage,
                     CommandId = response.CommandId,
                     IsCompleted = response.IsCompleted,
+                    Canceled = response.Canceled,
                     Attachments = response.Attachments.Select(att => new Attachment
                     {
                         FileId = att.FileId,
                         FileName = att.FileName,
-                        ContentType = att.ContentType,
-                        FileSize = att.FileSize,
-                        FileUrl = att.FileUrl
+                        ContentType = att.ContentType
                     }).ToList()
                 };
             }
@@ -283,9 +356,7 @@ namespace ApiGateway.GraphQL
                 {
                     FileId = attachment.FileId,
                     FileName = attachment.FileName,
-                    ContentType = attachment.ContentType,
-                    FileSize = attachment.FileSize,
-                    FileUrl = attachment.FileUrl ?? string.Empty
+                    ContentType = attachment.ContentType
                 };
 
                 var request = new AttachFileRequest
@@ -297,13 +368,14 @@ namespace ApiGateway.GraphQL
                 var response = await _client.AttachFileToMessageAsync(request);
 
                 _logger.LogInformation("Файл {FileName} успешно прикреплен к сообщению {MessageId}", attachment.FileName, messageId);
+                if (response.Attachment == null)
+                    throw new InvalidOperationException("Attachment не найден в ответе сервиса");
+
                 return new Attachment
                 {
                     FileId = response.Attachment.FileId,
                     FileName = response.Attachment.FileName,
-                    ContentType = response.Attachment.ContentType,
-                    FileSize = response.Attachment.FileSize,
-                    FileUrl = response.Attachment.FileUrl
+                    ContentType = response.Attachment.ContentType
                 };
             }
             catch (Exception ex)
@@ -381,9 +453,7 @@ namespace ApiGateway.GraphQL
                     {
                         FileId = attachment.FileId,
                         FileName = attachment.FileName,
-                        ContentType = attachment.ContentType,
-                        FileSize = attachment.FileSize,
-                        FileUrl = attachment.FileUrl ?? string.Empty
+                        ContentType = attachment.ContentType
                     });
                 }
             }

@@ -138,6 +138,26 @@ namespace ApiGateway.GraphQL
                 .ResolveWith<StorageResolver>(r => r.GetFileDownloadUrl(default!, default!))
                 .Description("Получение URL для скачивания файла")
                 .Authorize();
+
+            descriptor.Field("getUserSubscription")
+                .Argument("userId", a => a.Type<NonNullType<StringType>>())
+                .Type<GetUserSubscriptionPayloadType>()
+                .ResolveWith<PaymentResolver>(r => r.GetUserSubscription(default!))
+                .Description("Получение информации о подписке пользователя")
+                .Authorize();
+
+            descriptor.Field("getSubscriptionTypes")
+                .Type<GetSubscriptionTypesPayloadType>()
+                .ResolveWith<PaymentResolver>(r => r.GetSubscriptionTypes())
+                .Description("Получение списка типов подписок")
+                .Authorize();
+
+            descriptor.Field("getUserQuota")
+                .Argument("userId", a => a.Type<NonNullType<StringType>>())
+                .Type<GetUserQuotaPayloadType>()
+                .ResolveWith<PaymentResolver>(r => r.GetUserQuota(default!))
+                .Description("Получение информации о квоте пользователя из платёжной системы")
+                .Authorize();
         }
     }
 }

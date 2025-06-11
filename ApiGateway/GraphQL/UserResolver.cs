@@ -62,12 +62,11 @@ namespace ApiGateway.GraphQL
         {
             try
             {
-                _logger.LogInformation("Attempting to register user with email: {Email}", input.Email);
+                _logger.LogInformation("Attempting to register user with username: {Username}", input.Username);
 
                 var response = await _client.RegisterUserAsync(new RegisterUserRequest
                 {
                     Username = input.Username,
-                    Email = input.Email,
                     Password = input.Password,
                     DeviceInfo = GetDeviceInfo(),
                     IpAddress = GetIpAddress()
@@ -113,7 +112,7 @@ namespace ApiGateway.GraphQL
         {
             try
             {
-                _logger.LogInformation("Attempting to login user with email: {Email}", input.Email);
+                _logger.LogInformation("Attempting to login user with username: {Username}", input.Username);
 
                 if (input == null)
                 {
@@ -125,19 +124,19 @@ namespace ApiGateway.GraphQL
                     };
                 }
 
-                if (string.IsNullOrEmpty(input.Email) || string.IsNullOrEmpty(input.Password))
+                if (string.IsNullOrEmpty(input.Username) || string.IsNullOrEmpty(input.Password))
                 {
-                    _logger.LogWarning("Login attempt with empty email or password");
+                    _logger.LogWarning("Login attempt with empty username or password");
                     return new AuthResponse
                     {
                         Success = false,
-                        Message = "Email и пароль не могут быть пустыми"
+                        Message = "Имя пользователя и пароль не могут быть пустыми"
                     };
                 }
 
                 var response = await _client.LoginAsync(new LoginRequest
                 {
-                    Email = input.Email,
+                    Username = input.Username,
                     Password = input.Password,
                     DeviceInfo = GetDeviceInfo(),
                     IpAddress = GetIpAddress(),
@@ -158,7 +157,7 @@ namespace ApiGateway.GraphQL
 
                     if (!_twoFactorAuthService.ValidateCode(input.TwoFactorSecret, input.TwoFactorCode))
                     {
-                        _logger.LogWarning("Invalid 2FA code for user: {Email}", input.Email);
+                        _logger.LogWarning("Invalid 2FA code for user: {Username}", input.Username);
                         return new AuthResponse
                         {
                             Success = false,
@@ -167,9 +166,10 @@ namespace ApiGateway.GraphQL
                     }
                 }
 
-                _logger.LogInformation("User successfully logged in: {Email}", input.Email);
-                _logger.LogDebug("Generated access token: {Token}", response.AccessToken);
-                _logger.LogDebug("Generated refresh token: {Token}", response.RefreshToken);
+                _logger.LogInformation("User successfully logged in: {Username}", input.Username);
+                _logger.LogInformation("Generated access token: {Token}", response.AccessToken);
+                _logger.LogInformation("Generated refresh token: {Token}", response.RefreshToken);
+                _logger.LogInformation("Generated email: {Email}", response.TokenInfo.Email);
 
                 return new AuthResponse
                 {
@@ -178,7 +178,8 @@ namespace ApiGateway.GraphQL
                     UserId = response.UserId,
                     AccessToken = response.AccessToken,
                     RefreshToken = response.RefreshToken,
-                    Username = response.TokenInfo.Username
+                    Username = response.TokenInfo.Username,
+                    Email = response.TokenInfo.Email
                 };
             }
             catch (RpcException ex)
@@ -279,7 +280,7 @@ namespace ApiGateway.GraphQL
                         UserId = response.Profile.UserId,
                         Username = response.Profile.Username,
                         Email = response.Profile.Email,
-                        CreatedAt = response.Profile.CreatedAt,
+                        CreatedAt = response.Profile.CreatedAt
                     }
                 };
             }
@@ -300,6 +301,44 @@ namespace ApiGateway.GraphQL
                     Success = false,
                     Message = "Внутренняя ошибка сервера при получении профиля пользователя"
                 };
+            }
+        }
+
+        // Методы для работы с email-кодом
+        public async Task<EmailCodePayload> RequestEmailCode([Argument] EmailCodeInput input)
+        {
+            try
+            {
+                var response = await _client.RequestEmailCodeAsync(new RequestEmailCodeRequest
+                {
+                    UserId = input.UserId ?? string.Empty,
+                    Email = input.Email ?? string.Empty
+                });
+                return new EmailCodePayload { Success = response.Success };
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "Ошибка при запросе email-кода: {Detail}", ex.Status.Detail);
+                return new EmailCodePayload { Success = false };
+            }
+        }
+
+        public async Task<EmailCodePayload> ConfirmEmailCode([Argument] ConfirmEmailCodeInput input)
+        {
+            try
+            {
+                var response = await _client.ConfirmEmailCodeAsync(new ConfirmEmailCodeRequest
+                {
+                    UserId = input.UserId ?? string.Empty,
+                    Email = input.Email ?? string.Empty,
+                    Code = input.Code ?? string.Empty
+                });
+                return new EmailCodePayload { Success = response.Success };
+            }
+            catch (RpcException ex)
+            {
+                _logger.LogError(ex, "Ошибка при подтверждении email-кода: {Detail}", ex.Status.Detail);
+                return new EmailCodePayload { Success = false };
             }
         }
     }

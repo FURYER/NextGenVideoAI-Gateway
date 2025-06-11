@@ -11,6 +11,7 @@ namespace ApiGateway.Services
         Task PublishNotificationAsync(NotificationMessage message);
         Task StartConsumingAsync();
         void StopConsuming();
+        Task PublishMontageStopCommandAsync(string userId, string chatId, string? messageId = null);
     }
 
     public class RabbitMQService : IRabbitMQService, IDisposable
@@ -20,6 +21,7 @@ namespace ApiGateway.Services
         private readonly ILogger<RabbitMQService> _logger;
         private readonly ITopicEventSender _topicEventSender;
         private readonly string _queueName = "site_notifications";
+        private readonly string _montageStopQueueName = "montage_stop_commands";
         private bool _isConsuming = false;
 
         public RabbitMQService(
@@ -144,6 +146,39 @@ namespace ApiGateway.Services
                 _isConsuming = false;
                 _logger.LogInformation("Остановили прослушивание очереди");
             }
+        }
+
+        public Task PublishMontageStopCommandAsync(string userId, string chatId, string? messageId = null)
+        {
+            // Объявляем очередь для команд остановки монтажа, если не объявлена
+            _channel.QueueDeclare(
+                queue: _montageStopQueueName,
+                durable: true,
+                exclusive: false,
+                autoDelete: false,
+                arguments: null);
+
+            var stopMessage = new MontageStopMessage
+            {
+                UserId = userId,
+                ChatId = chatId,
+                MessageId = messageId
+            };
+            var body = JsonSerializer.SerializeToUtf8Bytes(stopMessage);
+            _channel.BasicPublish(
+                exchange: "",
+                routingKey: _montageStopQueueName,
+                basicProperties: null,
+                body: body);
+            _logger.LogInformation("Опубликована команда остановки монтажа: {@StopMessage}", stopMessage);
+            return Task.CompletedTask;
+        }
+
+        private class MontageStopMessage
+        {
+            public string UserId { get; set; } = string.Empty;
+            public string ChatId { get; set; } = string.Empty;
+            public string? MessageId { get; set; }
         }
 
         public void Dispose()

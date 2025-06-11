@@ -17,6 +17,7 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.IsEditingStage).Type<NonNullType<BooleanType>>().Description("Находится ли сообщение на этапе монтажа");
             descriptor.Field(f => f.CommandId).Type<StringType>().Description("ID команды");
             descriptor.Field(f => f.IsCompleted).Type<NonNullType<BooleanType>>().Description("Завершено ли выполнение");
+            descriptor.Field(f => f.Canceled).Type<NonNullType<BooleanType>>().Description("Сообщение отменено");
             descriptor.Field(f => f.Attachments).Type<ListType<NonNullType<AttachmentType>>>().Description("Прикрепленные файлы");
         }
     }
@@ -33,6 +34,7 @@ namespace ApiGateway.GraphQL
         public bool IsEditingStage { get; set; }
         public string? CommandId { get; set; }
         public bool IsCompleted { get; set; }
+        public bool Canceled { get; set; }
         public List<Attachment> Attachments { get; set; } = new();
     }
 
@@ -82,8 +84,6 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.FileId).Type<NonNullType<StringType>>().Description("ID файла");
             descriptor.Field(f => f.FileName).Type<NonNullType<StringType>>().Description("Имя файла");
             descriptor.Field(f => f.ContentType).Type<NonNullType<StringType>>().Description("Тип содержимого файла");
-            descriptor.Field(f => f.FileSize).Type<NonNullType<LongType>>().Description("Размер файла");
-            descriptor.Field(f => f.FileUrl).Type<StringType>().Description("URL файла");
         }
     }
 
@@ -92,8 +92,6 @@ namespace ApiGateway.GraphQL
         public string FileId { get; set; } = string.Empty;
         public string FileName { get; set; } = string.Empty;
         public string ContentType { get; set; } = string.Empty;
-        public long FileSize { get; set; }
-        public string? FileUrl { get; set; }
     }
 
     public class ChatStreamResponseType : ObjectType<ChatStreamResponse>
@@ -142,8 +140,6 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.FileId).Type<NonNullType<StringType>>().Description("ID файла");
             descriptor.Field(f => f.FileName).Type<NonNullType<StringType>>().Description("Имя файла");
             descriptor.Field(f => f.ContentType).Type<NonNullType<StringType>>().Description("Тип содержимого файла");
-            descriptor.Field(f => f.FileSize).Type<NonNullType<LongType>>().Description("Размер файла");
-            descriptor.Field(f => f.FileUrl).Type<StringType>().Description("URL файла");
         }
     }
 

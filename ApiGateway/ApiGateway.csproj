@@ -28,6 +28,8 @@
     <PackageReference Include="StackExchange.Redis" Version="2.8.31" />
     <PackageReference Include="System.Linq.Async" Version="6.0.1" />
     <PackageReference Include="System.Reactive" Version="6.0.1" />
+    <PackageReference Include="MassTransit" Version="8.2.0" />
+    <PackageReference Include="MassTransit.RabbitMQ" Version="8.2.0" />
   </ItemGroup>
 
 <ItemGroup>
