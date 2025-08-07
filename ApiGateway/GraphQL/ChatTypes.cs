@@ -118,6 +118,7 @@ namespace ApiGateway.GraphQL
         public string Content { get; set; } = string.Empty;
         public string UserId { get; set; } = string.Empty;
         public List<Attachment>? Attachments { get; set; }
+        public int? LastReceivedLength { get; set; } // Новое поле для resume-стрима
     }
 
     public class StreamChatInputType : InputObjectType<StreamChatInput>
@@ -129,6 +130,7 @@ namespace ApiGateway.GraphQL
             descriptor.Field(f => f.Content).Type<NonNullType<StringType>>().Description("Содержимое сообщения");
             descriptor.Field(f => f.UserId).Type<NonNullType<StringType>>().Description("ID пользователя");
             descriptor.Field(f => f.Attachments).Type<ListType<AttachmentInputType>>().Description("Прикрепленные файлы");
+            descriptor.Field(f => f.LastReceivedLength).Type<IntType>().Description("Длина уже полученного текста (offset)"); // Новое поле
         }
     }
 

@@ -142,6 +142,7 @@ message StreamChatRequest {
   string content = 2;
   string user_id = 3;
   repeated AttachmentInfo attachments = 4;
+  int32 last_received_length = 5;
 }
 
 message StreamChatResponse {

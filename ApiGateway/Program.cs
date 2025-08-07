@@ -28,7 +28,6 @@ using HotChocolate.AspNetCore.Subscriptions;
 using Microsoft.AspNetCore.Builder;
 using Prometheus;
 using Serilog;
-using Serilog.Sinks.Elasticsearch;
 using Microsoft.AspNetCore.DataProtection.AuthenticatedEncryption;
 using ApiGateway.GraphQL.Subscriptions;
 using StackExchange.Redis;
@@ -54,16 +53,6 @@ public class Program
                 .ReadFrom.Configuration(context.Configuration)
                 .ReadFrom.Services(services)
                 .WriteTo.Console()
-                .WriteTo.Elasticsearch(new ElasticsearchSinkOptions(new Uri(Environment.GetEnvironmentVariable("ELASTICSEARCH_URL")!))
-                {
-                    IndexFormat = "dotnet-logs-{0:yyyy.MM.dd}",
-                    AutoRegisterTemplate = true,
-                    EmitEventFailure = EmitEventFailureHandling.WriteToSelfLog |
-                          EmitEventFailureHandling.WriteToFailureSink,
-                    ModifyConnectionSettings = c => c
-                        .BasicAuthentication("elastic", "lSoBIBgQjc4nFQWArZBt")
-                        .ServerCertificateValidationCallback((o, cert, chain, errors) => true)
-                })
                 .Enrich.WithProperty("Application", "gateway")
                 .Enrich.FromLogContext()
                 .MinimumLevel.Information())

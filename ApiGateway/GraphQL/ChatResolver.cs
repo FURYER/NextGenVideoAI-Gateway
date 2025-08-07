@@ -443,6 +443,10 @@ namespace ApiGateway.GraphQL
                 Content = input.Content,
                 UserId = input.UserId
             };
+            if (input.LastReceivedLength.HasValue)
+            {
+                request.LastReceivedLength = input.LastReceivedLength.Value;
+            }
 
             // Добавляем вложения, если они есть
             if (input.Attachments != null && input.Attachments.Any())
