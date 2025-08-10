@@ -322,7 +322,7 @@ public class Program
                                 Console.WriteLine($"Path: {context.Request.Path}, Method: {context.Request.Method}");
 
                                 // Проверяем WebSocket соединения для GraphQL
-                                if (context.Request.Path.StartsWithSegments("/graphql/ws"))
+                                if (context.Request.Path.StartsWithSegments("/graphql"))
                                 {
                                     Console.WriteLine("WebSocket connection detected");
                                     string? token = null;
@@ -489,8 +489,8 @@ public class Program
 
                     app.UseEndpoints(endpoints =>
                     {
-                        // Добавляем WebSocket endpoint для GraphQL с явным указанием пути
-                        endpoints.MapGraphQLWebSocket("/graphql/ws");
+                        // Добавляем WebSocket endpoint для GraphQL с правильным путем
+                        endpoints.MapGraphQLWebSocket("/graphql");
 
                         // Настраиваем GraphQL endpoint и включаем GraphiQL UI
                         endpoints.MapGraphQL("/graphql")
