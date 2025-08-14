@@ -31,14 +31,22 @@ namespace ApiGateway.GraphQL.Subscriptions
             {
                 var userId = GetUserId();
 
+                // Проверяем, есть ли userId в сообщении
                 if (message.Data != null && message.Data.TryGetValue("userId", out var messageUserId))
                 {
+                    // Если в сообщении указан userId, проверяем соответствие
                     if (messageUserId != null && userId != null && !messageUserId.ToString()!.Equals(userId))
                     {
                         _logger.LogInformation("Сообщение отфильтровано. Предназначено для {MessageUserId}, текущий пользователь {UserId}",
                             messageUserId, userId);
                         return null;
                     }
+                }
+                else
+                {
+                    // Если в сообщении нет userId, не отправляем его никому
+                    _logger.LogInformation("Сообщение отфильтровано. Отсутствует userId в данных сообщения");
+                    return null;
                 }
 
                 return message;
