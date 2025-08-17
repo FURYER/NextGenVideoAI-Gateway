@@ -335,10 +335,8 @@ namespace ApiGateway.GraphQL
                     input.ContentType = GetContentTypeFromFileName(input.FileName);
                 }
 
-                // Общее количество фрагментов, которое будет вычислено на основе размера файла 
-                // и оптимального размера чанка
-                var chunkSize = 5 * 1024 * 1024; // Размер чанка: 5 МБ
-                int totalChunks = (int)Math.Ceiling((double)input.TotalSize / chunkSize);
+                // Общее количество фрагментов передается клиентом
+                int totalChunks = input.TotalChunks;
 
                 var request = new InitChunkedUploadRequest
                 {
@@ -473,7 +471,14 @@ namespace ApiGateway.GraphQL
                     UserId = userId
                 };
 
-                var response = await _client.CompleteChunkedUploadAsync(request);
+                // Используем токен отмены HTTP-запроса, чтобы не ставить жёсткий таймаут
+                var requestAborted = _httpContextAccessor.HttpContext?.RequestAborted ?? CancellationToken.None;
+
+                _logger.LogInformation("Отправка gRPC запроса CompleteChunkedUpload для {UploadId}", uploadId);
+                var response = await _client.CompleteChunkedUploadAsync(request,
+                    cancellationToken: requestAborted);
+                _logger.LogInformation("Получен gRPC ответ для {UploadId}: Success={Success}, FileId={FileId}, FileSize={FileSize}",
+                    uploadId, response.Success, response.FileId, response.FileSize);
 
                 if (!response.Success)
                 {
@@ -489,16 +494,49 @@ namespace ApiGateway.GraphQL
                 _logger.LogInformation("Загрузка {UploadId} успешно завершена, fileId: {FileId}",
                     uploadId, response.FileId);
 
-                return new CompleteChunkedUploadResult
+                var result = new CompleteChunkedUploadResult
                 {
                     Success = true,
                     FileId = response.FileId,
                     FileSize = response.FileSize
                 };
+
+                _logger.LogInformation("Возвращаем результат для {UploadId}: Success={Success}, FileId={FileId}, FileSize={FileSize}",
+                    uploadId, result.Success, result.FileId, result.FileSize);
+
+                return result;
+            }
+            catch (RpcException rpcEx)
+            {
+                _logger.LogError(rpcEx, "gRPC ошибка при завершении фрагментированной загрузки {UploadId}: {StatusCode} - {Message}",
+                    uploadId, rpcEx.Status.StatusCode, rpcEx.Status.Detail);
+
+                var errorMessage = rpcEx.Status.StatusCode switch
+                {
+                    StatusCode.DeadlineExceeded => "Превышено время ожидания при завершении загрузки",
+                    StatusCode.Unavailable => "Сервис хранилища недоступен",
+                    StatusCode.Internal => "Внутренняя ошибка сервиса хранилища",
+                    _ => $"Ошибка сервиса хранилища: {rpcEx.Status.Detail}"
+                };
+
+                return new CompleteChunkedUploadResult
+                {
+                    Success = false,
+                    ErrorMessage = errorMessage
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogError("Операция завершения загрузки {UploadId} была отменена", uploadId);
+                return new CompleteChunkedUploadResult
+                {
+                    Success = false,
+                    ErrorMessage = "Операция была отменена"
+                };
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Ошибка при завершении фрагментированной загрузки {UploadId}", uploadId);
+                _logger.LogError(ex, "Неожиданная ошибка при завершении фрагментированной загрузки {UploadId}", uploadId);
                 return new CompleteChunkedUploadResult
                 {
                     Success = false,

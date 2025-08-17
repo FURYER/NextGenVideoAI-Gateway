@@ -137,24 +137,13 @@ public class Program
                         {
                             OnAuthenticationFailed = context =>
                             {
-                                if (context.Exception.GetType() == typeof(SecurityTokenExpiredException))
-                                {
-                                    context.Response.Headers["Token-Expired"] = "true";
-                                    context.Response.StatusCode = 401;
-                                }
+                                // Не мешаем пайплайну GraphQL, лишь логируем
                                 return Task.CompletedTask;
                             },
                             OnChallenge = context =>
                             {
-                                context.HandleResponse();
-                                context.Response.StatusCode = 401;
-                                context.Response.ContentType = "application/json";
-                                var result = System.Text.Json.JsonSerializer.Serialize(new
-                                {
-                                    error = "Unauthorized",
-                                    message = "Invalid token or token expired"
-                                });
-                                return context.Response.WriteAsync(result);
+                                // Не перехватываем ответ тут, пускай GraphQL вернёт UNAUTHENTICATED
+                                return Task.CompletedTask;
                             }
                         };
                     });
@@ -275,6 +264,7 @@ public class Program
                         .ModifyRequestOptions(opt =>
                         {
                             opt.IncludeExceptionDetails = true;
+                            opt.ExecutionTimeout = TimeSpan.FromMinutes(60);
                         })
                         .ModifyOptions(opt =>
                         {
@@ -318,81 +308,39 @@ public class Program
                         {
                             OnMessageReceived = context =>
                             {
-                                // Логируем путь и заголовки для диагностики
-                                Console.WriteLine($"Path: {context.Request.Path}, Method: {context.Request.Method}");
-
-                                // Проверяем WebSocket соединения для GraphQL
                                 if (context.Request.Path.StartsWithSegments("/graphql/ws"))
                                 {
-                                    Console.WriteLine("WebSocket connection detected");
                                     string? token = null;
-
-                                    // Ищем токен в connectionParams authorization
                                     if (context.Request.Query.TryGetValue("authorization", out var authQuery))
                                     {
-                                        Console.WriteLine($"Found token in query: {authQuery}");
                                         token = authQuery.ToString().Replace("Bearer ", "");
                                     }
-                                    // Проверяем заголовок Authorization
-                                    else
+                                    else if (context.Request.Headers.TryGetValue("Authorization", out var authHeader) && authHeader.ToString().StartsWith("Bearer "))
                                     {
-                                        var authHeader = context.Request.Headers["Authorization"].ToString();
-                                        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer "))
-                                        {
-                                            Console.WriteLine($"Found token in Authorization header: {authHeader}");
-                                            token = authHeader.Substring(7);
-                                        }
+                                        token = authHeader.ToString().Substring(7);
                                     }
-
-                                    // Если токен найден, сохраняем его и в контексте
-                                    if (token != null)
+                                    else if (context.Request.Headers.ContainsKey("Sec-WebSocket-Protocol"))
                                     {
-                                        context.Token = token;
-                                        // Важно: сохраняем токен в HttpContext.Items для обработчика авторизации
-                                        context.HttpContext.Items["WebSocketAuthToken"] = token;
-                                        return Task.CompletedTask;
-                                    }
-
-                                    // Проверяем заголовок Sec-WebSocket-Protocol 
-                                    if (context.Request.Headers.ContainsKey("Sec-WebSocket-Protocol"))
-                                    {
-                                        Console.WriteLine($"WebSocket Protocols: {context.Request.Headers["Sec-WebSocket-Protocol"]}");
                                         var protocols = context.Request.Headers["Sec-WebSocket-Protocol"].ToString().Split(',');
                                         foreach (var protocol in protocols)
                                         {
-                                            var trimmedProtocol = protocol.Trim();
-                                            if (trimmedProtocol.StartsWith("Bearer "))
+                                            var trimmed = protocol.Trim();
+                                            if (trimmed.StartsWith("Bearer "))
                                             {
-                                                Console.WriteLine($"Found token in protocol: {trimmedProtocol}");
-                                                token = trimmedProtocol.Substring(7);
-                                                context.Token = token;
-                                                context.HttpContext.Items["WebSocketAuthToken"] = token;
-                                                return Task.CompletedTask;
+                                                token = trimmed.Substring(7);
+                                                break;
                                             }
                                         }
                                     }
 
-                                    // Для диагностики проверяем все заголовки
-                                    foreach (var header in context.Request.Headers)
+                                    if (!string.IsNullOrWhiteSpace(token))
                                     {
-                                        Console.WriteLine($"Header: {header.Key} = {header.Value}");
-                                    }
-
-                                    // Временный хак для отладки: проверка всех параметров запроса
-                                    foreach (var param in context.Request.Query)
-                                    {
-                                        Console.WriteLine($"Query param: {param.Key} = {param.Value}");
-                                        if (param.Key.Contains("token") || param.Key.Contains("auth"))
-                                        {
-                                            token = param.Value.ToString().Replace("Bearer ", "");
-                                            context.Token = token;
-                                            context.HttpContext.Items["WebSocketAuthToken"] = token;
-                                            return Task.CompletedTask;
-                                        }
+                                        context.Token = token;
+                                        context.HttpContext.Items["WebSocketAuthToken"] = token;
                                     }
                                 }
 
-                                // Для любых других запросов проверяем стандартный заголовок
+                                // Стандартный заголовок для прочих запросов
                                 var authHeaderDefault = context.Request.Headers["Authorization"].ToString();
                                 if (!string.IsNullOrEmpty(authHeaderDefault) && authHeaderDefault.StartsWith("Bearer "))
                                 {
@@ -483,6 +431,88 @@ public class Program
                     // Добавляем CORS middleware
                     app.UseCors();
 
+                    // Жёсткая проверка токена при установке WebSocket-соединения GraphQL
+                    app.Use(async (context, next) =>
+                    {
+                        if (context.Request.Path.StartsWithSegments("/graphql/ws"))
+                        {
+                            var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+                            string? token = null;
+
+                            // 1) query параметр authorization=Bearer xxx
+                            if (context.Request.Query.TryGetValue("authorization", out var authQuery))
+                            {
+                                token = authQuery.ToString().Replace("Bearer ", "");
+                                if (!string.IsNullOrWhiteSpace(token))
+                                {
+                                    logger.LogInformation("[WS Handshake] Токен получен из query ?authorization");
+                                }
+                            }
+
+                            // 2) Header Authorization: Bearer xxx
+                            if (string.IsNullOrWhiteSpace(token) && context.Request.Headers.TryGetValue("Authorization", out var authHeader) && authHeader.ToString().StartsWith("Bearer "))
+                            {
+                                token = authHeader.ToString().Substring(7);
+                                logger.LogInformation("[WS Handshake] Токен получен из заголовка Authorization");
+                            }
+
+                            // 3) Sec-WebSocket-Protocol: Bearer xxx
+                            if (string.IsNullOrWhiteSpace(token) && context.Request.Headers.ContainsKey("Sec-WebSocket-Protocol"))
+                            {
+                                var protocols = context.Request.Headers["Sec-WebSocket-Protocol"].ToString().Split(',');
+                                foreach (var protocol in protocols)
+                                {
+                                    var trimmed = protocol.Trim();
+                                    if (trimmed.StartsWith("Bearer "))
+                                    {
+                                        token = trimmed.Substring(7);
+                                        logger.LogInformation("[WS Handshake] Токен получен из заголовка Sec-WebSocket-Protocol");
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (string.IsNullOrWhiteSpace(token))
+                            {
+                                logger.LogWarning("[WS Handshake] Токен отсутствует — отклоняем подключение (401)");
+                                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                await context.Response.WriteAsync("Unauthorized: missing token");
+                                return;
+                            }
+
+                            try
+                            {
+                                var userServiceClient = context.RequestServices.GetRequiredService<UserService.Protos.UserService.UserServiceClient>();
+                                var validateResponse = await userServiceClient.ValidateTokenAsync(new UserService.Protos.ValidateTokenRequest { Token = token });
+
+                                if (!validateResponse.IsValid)
+                                {
+                                    logger.LogWarning("[WS Handshake] Токен не валиден — отклоняем подключение (401)");
+                                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                    await context.Response.WriteAsync("Unauthorized: invalid token");
+                                    return;
+                                }
+
+                                // Сохраняем в Items для дальнейших резолверов/авторизации
+                                context.Items["WebSocketAuthToken"] = token;
+                                context.Items["UserId"] = validateResponse.UserId;
+                                context.Items["TokenInfo"] = validateResponse.TokenInfo;
+
+                                logger.LogInformation("[WS Handshake] Токен валиден, пользователь {UserId}. Разрешаем подключение.", validateResponse.UserId);
+                            }
+                            catch (Exception ex)
+                            {
+                                var error = ex.Message;
+                                logger.LogError(ex, "[WS Handshake] Ошибка при валидации токена: {Error}", error);
+                                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                await context.Response.WriteAsync("Unauthorized: validation error");
+                                return;
+                            }
+                        }
+
+                        await next();
+                    });
+
                     // Добавляем middleware для аутентификации и авторизации
                     app.UseAuthentication();
                     app.UseAuthorization();
@@ -512,10 +542,32 @@ public class Program
                             HttpContext context,
                             [FromServices] IStorageService storageService,
                             [FromServices] ICurrentUserService currentUserService,
+                            [FromServices] UserService.Protos.UserService.UserServiceClient userServiceClient,
                             [FromServices] ILogger<Program> logger) =>
                         {
                             try
                             {
+                                // Валидируем токен ТОЛЬКО через UserService
+                                var authHeader = context.Request.Headers["Authorization"].ToString();
+                                var token = string.IsNullOrWhiteSpace(authHeader) ? string.Empty : authHeader.Replace("Bearer ", "");
+                                if (string.IsNullOrWhiteSpace(token))
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "Отсутствует токен авторизации" });
+                                    return;
+                                }
+
+                                var validateResponse = await userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
+                                if (!validateResponse.IsValid)
+                                {
+                                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                                    await context.Response.WriteAsJsonAsync(new { error = "Unauthorized", message = "Невалидный токен" });
+                                    return;
+                                }
+
+                                // Сохраняем UserId для CurrentUserService
+                                context.Items["UserId"] = validateResponse.UserId;
+
                                 var userId = currentUserService.GetCurrentUserId();
 
                                 // Получаем метаданные файла
@@ -578,7 +630,7 @@ public class Program
                                     logger.LogError(ex, "Ошибка при отправке файла {FileId}", fileId);
                                 }
                             }
-                        }).RequireAuthorization();
+                        });
                     });
 
                     // Стартуем RabbitMQ сервис для прослушивания сообщений

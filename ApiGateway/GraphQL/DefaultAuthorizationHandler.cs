@@ -66,54 +66,59 @@ namespace ApiGateway.GraphQL
                 return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
             }
 
-            // Проверяем аутентификацию пользователя
-            if (httpContext.User?.Identity?.IsAuthenticated == true)
+            // Валидируем ТОЛЬКО через UserService (игнорируем состояние ASP.NET аутентификации)
+            string token = string.Empty;
+            if (httpContext.Items.TryGetValue("WebSocketAuthToken", out var wsTokenObj) && wsTokenObj is string wsToken && !string.IsNullOrWhiteSpace(wsToken))
             {
-                var token = httpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-                if (!string.IsNullOrEmpty(token))
-                {
-                    try
-                    {
-                        var validateResponse = await _userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
-                        if (!validateResponse.IsValid)
-                        {
-                            _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
-                            httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                            httpContext.Response.Headers["Token-Expired"] = "true";
-                            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
-                        }
-                        _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
-                        context.SetLocalState("UserId", validateResponse.UserId);
-                        context.SetLocalState("TokenInfo", validateResponse.TokenInfo);
-
-                        // Проверка наличия email
-                        var allowedWithoutEmail = new[] { "login", "registerUser", "requestEmailCode", "confirmEmailCode", "refreshToken" };
-                        var fieldName = context.Selection?.Field?.Name;
-                        if (string.IsNullOrEmpty(validateResponse.TokenInfo.Email) && (fieldName == null || !allowedWithoutEmail.Contains(fieldName, StringComparer.OrdinalIgnoreCase)))
-                        {
-                            _logger.LogWarning("User {UserId} has no email and tried to access {FieldName}", validateResponse.UserId, fieldName);
-                            httpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
-                            await httpContext.Response.WriteAsync("Доступ запрещён: требуется подтверждённый email");
-                            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
-                        }
-                        return HotChocolate.Authorization.AuthorizeResult.Allowed;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error validating token via UserService: {Error}", ex.Message);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("No token found in Authorization header");
-                }
+                token = wsToken;
             }
             else
             {
-                _logger.LogWarning("User is not authenticated");
+                token = httpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
             }
 
-            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _logger.LogWarning("No token provided for authorization");
+                httpContext.Items["AuthErrorCode"] = "UNAUTHENTICATED";
+                return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+            }
+
+            try
+            {
+                var validateResponse = await _userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
+                if (!validateResponse.IsValid)
+                {
+                    _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
+                    httpContext.Items["AuthErrorCode"] = "UNAUTHENTICATED";
+                    return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+                }
+
+                _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
+                // Сохраняем идентификатор пользователя для последующего использования
+                context.SetLocalState("UserId", validateResponse.UserId);
+                context.SetLocalState("TokenInfo", validateResponse.TokenInfo);
+                httpContext.Items["UserId"] = validateResponse.UserId;
+                httpContext.Items["TokenInfo"] = validateResponse.TokenInfo;
+
+                // Проверка наличия email
+                var allowedWithoutEmail = new[] { "login", "registerUser", "requestEmailCode", "confirmEmailCode", "refreshToken" };
+                var fieldName = context.Selection?.Field?.Name;
+                if (string.IsNullOrEmpty(validateResponse.TokenInfo.Email) && (fieldName == null || !allowedWithoutEmail.Contains(fieldName, StringComparer.OrdinalIgnoreCase)))
+                {
+                    _logger.LogWarning("User {UserId} has no email and tried to access {FieldName}", validateResponse.UserId, fieldName);
+                    httpContext.Items["AuthErrorCode"] = "AUTH_NOT_AUTHORIZED";
+                    return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+                }
+
+                return HotChocolate.Authorization.AuthorizeResult.Allowed;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating token via UserService: {Error}", ex.Message);
+                httpContext.Items["AuthErrorCode"] = "UNAUTHENTICATED";
+                return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+            }
         }
 
         public async ValueTask<HotChocolate.Authorization.AuthorizeResult> AuthorizeAsync(
@@ -121,12 +126,16 @@ namespace ApiGateway.GraphQL
             IReadOnlyList<HotChocolate.Authorization.AuthorizeDirective> directives,
             CancellationToken cancellationToken = default)
         {
-            _logger.LogWarning("AuthorizeAsync: директивы = {Policies}", string.Join(",", directives.Select(d => d.Policy)));
+            var policies = (directives ?? Array.Empty<HotChocolate.Authorization.AuthorizeDirective>())
+                .Select(d => d.Policy)
+                .OfType<string>()
+                .ToList();
+            _logger.LogWarning("AuthorizeAsync: директивы = {Policies}", string.Join(",", policies));
             // Логируем входящий контекст для диагностики
             _logger.LogInformation("AuthorizationContext типа: {ContextType}", context.GetType().Name);
 
             // Проверяем наличие политики AllowAnonymous
-            if (await Task.Run(() => directives.Any(d => d.Policy == "AllowAnonymous"), cancellationToken))
+            if (directives != null && await Task.Run(() => directives.Any(d => d.Policy == "AllowAnonymous"), cancellationToken))
             {
                 _logger.LogDebug("AllowAnonymous policy detected, allowing access");
                 return HotChocolate.Authorization.AuthorizeResult.Allowed;
@@ -148,64 +157,51 @@ namespace ApiGateway.GraphQL
                 _logger.LogInformation("Header: {Key} = {Value}", header.Key, header.Value);
             }
 
-            // Особые проверки для WebSocket соединений
-            if (httpContext.WebSockets.IsWebSocketRequest ||
-                httpContext.Request.Path.StartsWithSegments("/graphql/ws"))
+            // Особые проверки для WebSocket соединений: больше не разрешаем без токена
+            if (httpContext.WebSockets.IsWebSocketRequest || httpContext.Request.Path.StartsWithSegments("/graphql/ws"))
             {
                 _logger.LogInformation("WebSocket connection detected");
-
-                // Проверяем есть ли токен в connectionParams
-                _logger.LogInformation("Проверка connectionParams для WebSocket");
-
-                // Для WebSocket подписок, всегда разрешаем доступ
-                // В HotChocolate 13 для обработки авторизации WebSocket соединений требуется
-                // дополнительная настройка WebSocketAuthenticationProtocol, что выходит за рамки
-                // текущей задачи. HotChocolate получает токен из connectionParams, но не передает его
-                // в стандартный механизм авторизации ASP.NET Core.
-                var contextTypeName = context.GetType().FullName;
-                _logger.LogInformation("Context type: {ContextType}", contextTypeName);
-                if (contextTypeName?.Contains("Subscription") == true)
-                {
-                    _logger.LogInformation("Подписка через WebSocket, разрешаем доступ");
-                    return HotChocolate.Authorization.AuthorizeResult.Allowed;
-                }
             }
 
-            // Стандартная проверка аутентификации пользователя
-            if (httpContext.User?.Identity?.IsAuthenticated == true)
+            // Валидируем ТОЛЬКО через UserService (игнорируем состояние ASP.NET аутентификации)
+            string token = string.Empty;
+            if (httpContext.Items.TryGetValue("WebSocketAuthToken", out var wsTokenObj) && wsTokenObj is string wsToken && !string.IsNullOrWhiteSpace(wsToken))
             {
-                var token = httpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
-                if (!string.IsNullOrEmpty(token))
-                {
-                    try
-                    {
-                        var validateResponse = await _userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
-                        if (!validateResponse.IsValid)
-                        {
-                            _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
-                            httpContext.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                            httpContext.Response.Headers["Token-Expired"] = "true";
-                            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
-                        }
-                        _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
-                        return HotChocolate.Authorization.AuthorizeResult.Allowed;
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Error validating token via UserService: {Error}", ex.Message);
-                    }
-                }
-                else
-                {
-                    _logger.LogWarning("No token found in Authorization header");
-                }
+                token = wsToken;
             }
             else
             {
-                _logger.LogWarning("User is not authenticated");
+                token = httpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
             }
 
-            return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                _logger.LogWarning("No token provided for authorization");
+                httpContext.Items["AuthErrorCode"] = "UNAUTHENTICATED";
+                return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+            }
+
+            try
+            {
+                var validateResponse = await _userServiceClient.ValidateTokenAsync(new ValidateTokenRequest { Token = token });
+                if (!validateResponse.IsValid)
+                {
+                    _logger.LogWarning("[JWT] Token is NOT valid in UserService: {Token}", token);
+                    httpContext.Items["AuthErrorCode"] = "UNAUTHENTICATED";
+                    return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+                }
+
+                _logger.LogInformation("Token validated successfully for user {UserId}", validateResponse.UserId);
+                httpContext.Items["UserId"] = validateResponse.UserId;
+                httpContext.Items["TokenInfo"] = validateResponse.TokenInfo;
+                return HotChocolate.Authorization.AuthorizeResult.Allowed;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error validating token via UserService: {Error}", ex.Message);
+                httpContext.Items["AuthErrorCode"] = "UNAUTHENTICATED";
+                return HotChocolate.Authorization.AuthorizeResult.NotAllowed;
+            }
         }
 
         private bool IsSchemaQuery(IMiddlewareContext context)
