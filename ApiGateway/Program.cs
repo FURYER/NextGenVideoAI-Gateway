@@ -84,7 +84,6 @@ public class Program
 
                     services.AddScoped<PaymentResolver>();
 
-                    // Добавляем HttpContextAccessor
                     services.AddHttpContextAccessor();
 
                     // Регистрируем RabbitMQ сервис
@@ -148,20 +147,16 @@ public class Program
                         };
                     });
 
-                    // Добавляем авторизацию
                     services.AddAuthorization(options =>
                     {
-                        // Добавляем политику по умолчанию, требующую аутентификацию
                         options.DefaultPolicy = new AuthorizationPolicyBuilder()
                             .RequireAuthenticatedUser()
                             .Build();
 
-                        // Добавляем политику AllowAnonymous для обхода авторизации
                         options.AddPolicy("AllowAnonymous", policy =>
                             policy.RequireAssertion(_ => true));
                     });
 
-                    // Добавляем CORS
                     services.AddCors(options =>
                     {
                         options.AddDefaultPolicy(builder =>
@@ -186,7 +181,6 @@ public class Program
                         options.MultipartBodyLengthLimit = long.MaxValue; // Устанавливаем максимальный размер для multipart формы
                     });
 
-                    // Добавляем сервисы
                     services.AddSingleton<ITwoFactorAuthService, TwoFactorAuthService>();
 
                     // Настраиваем Redis
@@ -199,7 +193,6 @@ public class Program
                     // Используем Redis для хранения состояния загрузки
                     services.AddSingleton<IUploadStateService, RedisUploadStateService>();
 
-                    // Добавляем защиту от CSRF
                     services.AddAntiforgery(options =>
                     {
                         options.Cookie.Name = "XSRF-TOKEN";
@@ -208,7 +201,6 @@ public class Program
                         options.Cookie.SameSite = SameSiteMode.Strict;
                     });
 
-                    // Добавляем rate limiting
                     services.AddRateLimiter(options =>
                     {
                         options.AddFixedWindowLimiter("GlobalLimiter", fixedOptions =>
@@ -218,7 +210,6 @@ public class Program
                         });
                     });
 
-                    // Добавляем GraphQL-сервер
                     services.AddGraphQLServer()
                         .AddQueryType<Query>()
                         .AddMutationType<Mutation>()
@@ -238,14 +229,12 @@ public class Program
                         .AddType<UpdateChatInputType>()
                         .AddType<UpdateChatPayloadType>()
                         .AddType<NotificationType>()
-                        // Добавляем типы хранилища файлов
                         .AddType<FileInfoType>()
                         .AddType<UploadFileResultType>()
                         .AddType<DeleteFileResultType>()
                         .AddType<UploadFileInputType>()
                         .AddType<DownloadFileResultType>()
                         .AddType<FileMetadataType>()
-                        // Добавляем типы для фрагментированной загрузки файлов
                         .AddType<InitChunkedUploadInputType>()
                         .AddType<InitChunkedUploadResultType>()
                         .AddType<ChunkUploadInputType>()
@@ -419,19 +408,16 @@ public class Program
                     app.UseRouting();
 
                     app.UseMetricServer(); // Экспортирует по пути /metrics по умолчанию
-                    app.UseHttpMetrics(); // Собирает метрики HTTP-запросов
+                    app.UseHttpMetrics();
 
-                    // Добавляем WebSocket middleware с настройками
                     app.UseWebSockets(new WebSocketOptions
                     {
                         KeepAliveInterval = TimeSpan.FromMinutes(2),
                         AllowedOrigins = { "*" }
                     });
 
-                    // Добавляем CORS middleware
                     app.UseCors();
 
-                    // Жёсткая проверка токена при установке WebSocket-соединения GraphQL
                     app.Use(async (context, next) =>
                     {
                         if (context.Request.Path.StartsWithSegments("/graphql/ws"))
@@ -513,13 +499,11 @@ public class Program
                         await next();
                     });
 
-                    // Добавляем middleware для аутентификации и авторизации
                     app.UseAuthentication();
                     app.UseAuthorization();
 
                     app.UseEndpoints(endpoints =>
                     {
-                        // Добавляем WebSocket endpoint для GraphQL с явным указанием пути
                         endpoints.MapGraphQLWebSocket("/graphql/ws");
 
                         // Настраиваем GraphQL endpoint и включаем GraphiQL UI
@@ -536,7 +520,6 @@ public class Program
                             await context.Response.WriteAsync("GraphQL API Gateway is running. Access GraphiQL at /graphql");
                         });
 
-                        // Добавляем REST endpoint для скачивания файлов
                         endpoints.MapGet("/files/{fileId}/download", async (
                             string fileId,
                             HttpContext context,

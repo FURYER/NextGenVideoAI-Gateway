@@ -197,11 +197,12 @@ namespace ApiGateway.GraphQL
         }
 
         public async Task<ChatMessage?> SendMessage(string chatId, string content, string userId,
-            bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null)
+            bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null, List<string>? selectedFileIds = null)
         {
             try
             {
-                _logger.LogInformation("Отправка сообщения в чат {ChatId} от пользователя {UserId} требует монтажа: {RequiresEditing}", chatId, userId, requiresEditing);
+                _logger.LogInformation("Отправка сообщения в чат {ChatId} от пользователя {UserId} требует монтажа: {RequiresEditing}, выбранные файлы: {SelectedFileIds}",
+                    chatId, userId, requiresEditing, selectedFileIds != null ? string.Join(",", selectedFileIds) : "нет");
 
                 // --- Проверка подписки и demo-квоты ---
                 var subscription = await _paymentResolver.GetUserSubscription(userId);
@@ -289,11 +290,13 @@ namespace ApiGateway.GraphQL
                         CommandId = null,
                         IsCompleted = false,
                         Canceled = false,
+                        SelectedFileIds = selectedFileIds ?? new List<string>()
                     };
 
                     await _publishEndpoint.Publish(montageMessage);
 
-                    _logger.LogInformation("MontageRequestMessage {MontageId} опубликовано в RabbitMQ для чата {ChatId}", message.Id, chatId);
+                    _logger.LogInformation("MontageRequestMessage {MontageId} опубликовано в RabbitMQ для чата {ChatId} с выбранными файлами: {SelectedFileIds}",
+                        message.Id, chatId, selectedFileIds != null ? string.Join(",", selectedFileIds) : "нет");
 
                 }
 
@@ -448,7 +451,6 @@ namespace ApiGateway.GraphQL
                 request.LastReceivedLength = input.LastReceivedLength.Value;
             }
 
-            // Добавляем вложения, если они есть
             if (input.Attachments != null && input.Attachments.Any())
             {
                 foreach (var attachment in input.Attachments)

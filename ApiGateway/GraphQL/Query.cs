@@ -1,4 +1,4 @@
-using HotChocolate.Authorization; // Добавляем пространство имён
+using HotChocolate.Authorization;
 using HotChocolate.Types;
 using System.Threading.Tasks;
 
@@ -44,7 +44,6 @@ namespace ApiGateway.GraphQL
                 .ResolveWith<ChatResolver>(r => r.StreamChat(default!))
                 .Authorize();
 
-            // Добавляем запросы для работы с файловым хранилищем
             descriptor.Field("getFileInfo")
                 .Argument("fileId", a => a.Type<NonNullType<StringType>>())
                 .Type<FileInfoType>()
@@ -76,7 +75,6 @@ namespace ApiGateway.GraphQL
                 .Description("Получение списка файлов пользователя")
                 .Authorize();
 
-            // Добавляем запрос для получения профиля пользователя
             descriptor.Field("getUserProfile")
                 .Argument("userId", a => a.Type<NonNullType<StringType>>())
                 .Type<UserProfileResponseType>()
@@ -84,7 +82,6 @@ namespace ApiGateway.GraphQL
                 .Description("Получение профиля пользователя")
                 .Authorize();
 
-            // Добавляем запрос для получения статуса фрагментированной загрузки
             descriptor.Field("getUploadStatus")
                 .Argument("uploadId", a => a.Type<NonNullType<StringType>>())
                 .Type<UploadStatusType>()
@@ -92,7 +89,6 @@ namespace ApiGateway.GraphQL
                 .Description("Получение статуса фрагментированной загрузки")
                 .Authorize();
 
-            // Добавляем запрос для получения информации о квоте пользователя
             descriptor.Field("getUserQuotaInfo")
                 .Argument("userId", a => a.Type<NonNullType<StringType>>())
                 .Type<UserQuotaInfoType>()

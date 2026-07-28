@@ -18,6 +18,7 @@ namespace OrchestrationService.Domain.Events
         public bool IsCompleted { get; set; }
         public bool Canceled { get; set; }
         public ICollection<MessageAttachmentDto> Attachments { get; set; } = new List<MessageAttachmentDto>();
+        public ICollection<string> SelectedFileIds { get; set; } = new List<string>();
     }
 
     public class MessageAttachmentDto

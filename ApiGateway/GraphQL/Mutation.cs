@@ -34,9 +34,9 @@ namespace ApiGateway.GraphQL
 
         [HotChocolate.Authorization.Authorize]
         public async Task<ChatMessage?> SendMessage([Service] ChatResolver resolver, string chatId, string content, string userId,
-            bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null)
+            bool requiresEditing = false, bool isEditingStage = false, List<Attachment>? attachments = null, List<string>? selectedFileIds = null)
         {
-            return await resolver.SendMessage(chatId, content, userId, requiresEditing, isEditingStage, attachments);
+            return await resolver.SendMessage(chatId, content, userId, requiresEditing, isEditingStage, attachments, selectedFileIds);
         }
 
         [HotChocolate.Authorization.Authorize]

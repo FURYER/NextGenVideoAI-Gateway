@@ -74,7 +74,6 @@ namespace ApiGateway.GraphQL
                         IsLastChunk = (i == totalChunks - 1)
                     };
 
-                    // Для первого чанка добавляем информацию о файле
                     if (i == 0)
                     {
                         chunk.UserId = userId;
@@ -328,7 +327,6 @@ namespace ApiGateway.GraphQL
                 _logger.LogInformation("Инициализация фрагментированной загрузки для пользователя {UserId} файла {FileName}",
                     input.UserId, input.FileName);
 
-                // Добавляем проверку наличия ContentType и устанавливаем значение по умолчанию
                 if (string.IsNullOrEmpty(input.ContentType))
                 {
                     _logger.LogWarning("ContentType не указан для файла {FileName}, определяем по расширению", input.FileName);
@@ -941,7 +939,6 @@ namespace ApiGateway.GraphQL
             }
         }
 
-        // Добавляем метод определения ContentType по имени файла
         private string GetContentTypeFromFileName(string fileName)
         {
             // Извлекаем расширение файла
