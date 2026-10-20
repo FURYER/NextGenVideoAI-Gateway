@@ -41,3 +41,10 @@ TestResults/
 
 # Ключи защиты данных
 ApiGateway/keys/
+# Certificates / keys (never commit)
+*.pfx
+*.key
+*.pem
+**/certs/*.pfx
+**/certs/*.key
+
